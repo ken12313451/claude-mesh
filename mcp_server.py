@@ -123,10 +123,11 @@ def send_mcp_notification(method: str, params: dict):
 
 
 def message_poller():
-    """Background thread that polls for new messages and sends MCP notifications.
+    """Background thread that polls for new messages and pushes via channel protocol.
 
     Uses mark_read=false so messages remain unread for check_messages tool.
     Tracks notified message IDs to avoid duplicate notifications.
+    Uses notifications/claude/channel for real-time push to Claude Code.
     """
     notified_ids = set()
     while True:
@@ -137,10 +138,15 @@ def message_poller():
                 msg_id = m.get("id")
                 if msg_id not in notified_ids:
                     notified_ids.add(msg_id)
-                    send_mcp_notification("notifications/message", {
-                        "level": "info",
-                        "logger": "claude-mesh",
-                        "data": f"Message from {m['from_peer'][:8]}: {m['content']}",
+                    # Use claude/channel protocol for real-time push
+                    send_mcp_notification("notifications/claude/channel", {
+                        "content": m["content"],
+                        "meta": {
+                            "from_id": m["from_peer"],
+                            "from_summary": m.get("from_summary", ""),
+                            "from_cwd": m.get("from_cwd", ""),
+                            "sent_at": m.get("timestamp", ""),
+                        },
                     })
         except Exception:
             pass
@@ -266,8 +272,17 @@ def handle_jsonrpc(request: dict) -> dict:
             "id": req_id,
             "result": {
                 "protocolVersion": "2024-11-05",
-                "capabilities": {"tools": {}},
-                "serverInfo": {"name": "claude-mesh", "version": "0.2.0"},
+                "capabilities": {
+                    "tools": {},
+                    "experimental": {"claude/channel": {}},
+                },
+                "serverInfo": {"name": "claude-mesh", "version": "0.3.0"},
+                "instructions": (
+                    "You are connected to claude-mesh, a distributed mesh network for Claude Code sessions. "
+                    "When you receive a <channel source=\"claude-mesh\"> message, respond immediately using "
+                    "send_message tool with the from_id as the target. "
+                    "On startup, call set_summary to identify yourself to other peers."
+                ),
             },
         }
 
