@@ -143,20 +143,134 @@ Claude@A14 → "Home-PCのRCにレビュー依頼"
 7. Claude@Home-PC → MCP: check_messages() → メッセージ受信
 ```
 
-## 設定ファイル
+## 新規PCセットアップガイド
 
+### 前提条件
+- Python 3.13+
+- `pip install websockets`
+- Claude Code CLI（サブスク認証済み）
+- Tailscale（リモートマシン間通信する場合）
+
+### Step 1: リポジトリをクローン
+```bash
+git clone https://github.com/ken12313451/claude-mesh.git
+```
+
+### Step 2: 設定ファイルを作成
+`~/.claude-mesh.json` を作成:
 ```json
 {
-    "machine_id": "home-pc",
-    "machine_name": "Home PC",
+    "machine_id": "my-pc",
+    "machine_name": "My PC",
     "transport": "direct",
     "mesh_port": 7900,
-    "known_peers": [
-        "100.109.107.51:7900"
-    ],
+    "local_api_port": 7901,
+    "known_peers": {"相手のmachine_id": "相手のTailscale_IP:7900"},
+    "auth_key": "全マシン共通のキー"
+}
+```
+**注意:**
+- `machine_id` は全マシンでユニーク。辞書順で小さい方がclient役（outgoing接続）になる
+- `known_peers` は `{"machine_id": "address"}` 形式。相手のmachine_idを記載
+- `auth_key` は全マシンで同一にすること
+
+### Step 3: MCP グローバル登録
+```bash
+claude mcp add --scope user claude-mesh -- python "/path/to/claude-mesh/mcp_server.py"
+```
+これで全プロジェクトからclaude-meshツールが使えるようになる。
+
+### Step 4: Claude起動コマンドの設定
+
+#### bash（Git Bash）の場合 — `~/.bashrc` に追加:
+```bash
+alias claude='claude --dangerously-load-development-channels server:claude-mesh --dangerously-skip-permissions'
+```
+
+#### PowerShellの場合 — `$PROFILE` に追加:
+```powershell
+function claude { & claude.exe --dangerously-load-development-channels server:claude-mesh --dangerously-skip-permissions @args }
+```
+
+#### SSH経由でリモートPCのClaudeを起動する場合:
+リモートPC側に `~/claude-mesh.sh` を作成:
+```bash
+#!/bin/bash
+exec claude.exe --dangerously-load-development-channels server:claude-mesh --dangerously-skip-permissions "$@"
+```
+```bash
+chmod +x ~/claude-mesh.sh
+```
+ローカルPC側のPowerShell `$PROFILE` に追加:
+```powershell
+function claude-remote { ssh -t remote-pc ~/claude-mesh.sh }
+```
+
+### Step 5: SSH設定（リモートPCへの接続用）
+`~/.ssh/config` に追加:
+```
+Host remote-pc
+    HostName <TailscaleのIP>
+    User <ユーザー名>
+    ServerAliveInterval 15
+    ServerAliveCountMax 3
+```
+
+### Step 6: statusline設定（context: X% 表示）
+`~/.claude/statusline.js` を作成:
+```javascript
+#!/usr/bin/env node
+let input = '';
+process.stdin.on('data', chunk => input += chunk);
+process.stdin.on('end', () => {
+    const data = JSON.parse(input);
+    const pct = Math.floor(data.context_window?.used_percentage || 0);
+    console.log(`context: ${pct}%`);
+});
+```
+Claude Codeのsettings.jsonに追加:
+```json
+"statusLine": {
+    "type": "command",
+    "command": "node C:/Users/<ユーザー名>/.claude/statusline.js"
+}
+```
+
+### Step 7: 動作確認
+```bash
+claude
+```
+起動時に以下が表示されればOK:
+- `Listening for channel messages from: server:claude-mesh` — channels有効
+- `bypass permissions on` — パーミッションスキップ有効
+- `context: 0%` — statusline有効
+
+`list_peers` で他のマシンのpeerが見えれば完了。
+
+## 設定ファイル詳細
+
+`~/.claude-mesh.json`:
+```json
+{
+    "machine_id": "my-pc",
+    "machine_name": "My PC",
+    "transport": "direct",
+    "mesh_port": 7900,
+    "local_api_port": 7901,
+    "known_peers": {"other-pc": "100.x.x.x:7900"},
     "auth_key": "shared-secret-key"
 }
 ```
+
+| フィールド | 説明 |
+|-----------|------|
+| machine_id | マシンの一意識別子。辞書順で小さい方がclient役 |
+| machine_name | 表示名 |
+| transport | "direct"（現在はこれのみ） |
+| mesh_port | broker間通信ポート（デフォルト7900） |
+| local_api_port | MCP→broker通信ポート（デフォルト7901） |
+| known_peers | {machine_id: address} 形式の接続先 |
+| auth_key | 認証キー（全マシン共通） |
 
 ## 実装ステップ
 
