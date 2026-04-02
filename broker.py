@@ -159,7 +159,12 @@ class MeshBroker:
             return {"status": "ok"}
 
         elif method == "POST" and path == "/heartbeat":
-            self.registry.heartbeat(body["peer_id"])
+            self.registry.heartbeat(
+                body["peer_id"],
+                machine_id=self.config.machine_id,
+                machine_name=self.config.machine_name,
+                session_dir=body.get("session_dir", ""),
+            )
             return {"status": "ok"}
 
         elif method == "GET" and path.startswith("/peers"):
