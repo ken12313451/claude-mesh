@@ -162,11 +162,11 @@ Claude@A14 → "Home-PCのRCにレビュー依頼"
 
 | Step | 内容 | 状態 |
 |------|------|------|
-| 1 | Transport抽象 + DirectTransport | 未着手 |
-| 2 | PeerRegistry (SQLite) | 未着手 |
-| 3 | Mesh Broker (ローカルAPI + peer同期) | 未着手 |
-| 4 | MCP Server (stdio) | 未着手 |
-| 5 | 2台で動作テスト | 未着手 |
+| 1 | Transport抽象 + DirectTransport | ✅ 完了 |
+| 2 | PeerRegistry (SQLite) | ✅ 完了 |
+| 3 | Mesh Broker (ローカルAPI + peer同期) | ✅ 完了 |
+| 4 | MCP Server (stdio) | ✅ 完了 |
+| 5 | 2台で動作テスト | ✅ 完了 (2026-04-02) |
 | 6 | RelayTransport追加 | 未着手 |
 
 ## claude-peers-mcp との違い
