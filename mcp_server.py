@@ -123,13 +123,20 @@ def send_mcp_notification(method: str, params: dict):
 
 
 def message_poller():
-    """Background thread that polls for new messages and sends MCP notifications."""
+    """Background thread that polls for new messages and sends MCP notifications.
+
+    Uses mark_read=false so messages remain unread for check_messages tool.
+    Tracks notified message IDs to avoid duplicate notifications.
+    """
+    notified_ids = set()
     while True:
         try:
-            result = broker_request("GET", f"/messages?peer_id={PEER_ID}")
+            result = broker_request("GET", f"/messages?peer_id={PEER_ID}&mark_read=false")
             messages = result.get("messages", [])
-            if messages:
-                for m in messages:
+            for m in messages:
+                msg_id = m.get("id")
+                if msg_id not in notified_ids:
+                    notified_ids.add(msg_id)
                     send_mcp_notification("notifications/message", {
                         "level": "info",
                         "logger": "claude-mesh",
