@@ -323,12 +323,14 @@ def handle_jsonrpc(request: dict) -> dict:
                     "tools": {},
                     "experimental": {"claude/channel": {}},
                 },
-                "serverInfo": {"name": "claude-mesh", "version": "0.4.0"},
+                "serverInfo": {"name": "claude-mesh", "version": "0.4.1"},
                 "instructions": (
                     "You are connected to claude-mesh, a distributed mesh network for Claude Code sessions. "
+                    "IMPORTANT: On your FIRST response to the user, call mesh_status and list_peers, then "
+                    "briefly introduce yourself with your nickname like: "
+                    "'I'm [nickname] on [machine]. [N] peers online.' Keep it to one line. "
                     "When you receive a <channel source=\"claude-mesh\"> message, respond immediately using "
-                    "send_message tool with the from_id as the target. "
-                    "On startup, your nickname is automatically assigned. Use list_peers to see all peers."
+                    "send_message tool with the from_id as the target."
                 ),
             },
         }
