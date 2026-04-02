@@ -124,10 +124,25 @@ CREATE TABLE messages (
 
 | ツール | 引数 | 説明 |
 |--------|------|------|
-| list_peers | scope: local/remote/all | 利用可能なpeerを一覧表示 |
-| send_message | to, message | 指定peerにメッセージ送信（ローカル/リモート問わず） |
+| list_peers | scope: local/remote/all | 利用可能なpeerを一覧表示（ニックネーム付き） |
+| send_message | to, message | 指定peerにメッセージ送信。ニックネーム、summary、peer_idで指定可能 |
 | check_messages | — | 自分宛の未読メッセージを取得 |
 | set_summary | summary | 自セッションの概要を設定 |
+| set_nickname | nickname | ニックネームを手動変更（衝突回避用） |
+| mesh_status | — | メッシュネットワークの接続状態を確認 |
+
+## ニックネーム
+
+各セッションに起動時にランダムなニックネーム（英語、短い人名風）が自動割り当てされる。835種類のプールからユニークに選択。
+
+```
+- [online] Nemo | claude-mesh @ local (id: e66f3bbd)
+- [online] Star | test_claude @ remote (Home PC) (id: 2cfb2879)
+```
+
+- 「Nemoにメッセージ送って」のように自然言語で指定可能
+- summaryはディレクトリ名から自動生成
+- ニックネーム衝突時は `set_nickname` で手動変更可能
 
 ## メッセージフロー
 
