@@ -151,7 +151,7 @@ class MeshBroker:
             self.registry.unregister(body["peer_id"])
             return {"status": "ok"}
 
-        elif method == "POST" and path == "/summary":
+        elif method == "POST" and path in ("/summary", "/set_summary"):
             self.registry.set_summary(body["peer_id"], body["summary"])
             return {"status": "ok"}
 
