@@ -95,14 +95,23 @@ class DirectTransport(Transport):
                 await websocket.close(1008, "Auth failed")
                 return
             remote_id = msg["machine_id"]
-
-            # Reject if already connected (avoid dual connections)
-            if remote_id in self._connections:
-                logger.info(f"Already connected to {remote_id}, rejecting incoming")
-                await websocket.close(1000, "Already connected")
-                return
-
             logger.info(f"Incoming connection from {remote_id}")
+
+            # If already connected, keep the one from the lexicographically smaller machine_id
+            if remote_id in self._connections:
+                if self.machine_id < remote_id:
+                    # We are the "client" side, keep our outgoing connection
+                    logger.info(f"Already connected to {remote_id} (we are client), rejecting incoming")
+                    await websocket.close(1000, "Already connected")
+                    return
+                else:
+                    # They are the "client" side, replace our connection with theirs
+                    old = self._connections.pop(remote_id)
+                    try:
+                        await old.close()
+                    except Exception:
+                        pass
+                    logger.info(f"Replacing outgoing to {remote_id} with incoming")
 
             # Send our hello back
             await websocket.send(json.dumps({
@@ -129,13 +138,6 @@ class DirectTransport(Transport):
     async def _connect_to_peer(self, address: str):
         """Maintain a persistent connection to a known peer."""
         while True:
-            # If already connected via incoming, wait and check periodically
-            connected_ids = [mid for mid, ws in self._connections.items()
-                            if not ws.closed]
-            if connected_ids:
-                await asyncio.sleep(10)
-                continue
-
             try:
                 uri = f"ws://{address}"
                 async with websockets.connect(
@@ -153,14 +155,28 @@ class DirectTransport(Transport):
                     msg = json.loads(raw)
                     if msg.get("type") != "hello_ack":
                         logger.warning(f"Unexpected ack from {address}: {msg}")
+                        await asyncio.sleep(5)
                         continue
 
                     remote_id = msg["machine_id"]
 
-                    # If incoming connection appeared while we were connecting
+                    # Resolve dual connection: smaller machine_id is the "client"
                     if remote_id in self._connections:
-                        logger.info(f"Already connected to {remote_id}, closing outgoing")
-                        continue
+                        if self.machine_id < remote_id:
+                            # We should be client — replace incoming with outgoing
+                            old = self._connections.pop(remote_id)
+                            try:
+                                await old.close()
+                            except Exception:
+                                pass
+                            logger.info(f"Replacing incoming from {remote_id} with outgoing")
+                        else:
+                            # They should be client — keep their incoming, drop ours
+                            logger.info(f"Already connected to {remote_id} via incoming, dropping outgoing")
+                            # Wait until the connection drops, then retry
+                            while remote_id in self._connections:
+                                await asyncio.sleep(5)
+                            continue
 
                     logger.info(f"Connected to {remote_id} at {address}")
                     self._connections[remote_id] = ws
