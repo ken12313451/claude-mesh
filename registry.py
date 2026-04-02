@@ -1,5 +1,6 @@
 """Peer Registry — SQLite-based peer and message storage."""
 
+import random
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -7,6 +8,19 @@ from pathlib import Path
 
 
 DEFAULT_DB_PATH = Path.home() / ".claude-mesh.db"
+
+# Short, memorable, human-like nicknames (5 chars max)
+NICKNAMES = [
+    "Ace", "Ada", "Ash", "Bay", "Bea", "Bo", "Buzz", "Cal", "Cleo", "Cody",
+    "Dana", "Dash", "Dawn", "Edy", "Eli", "Eve", "Fay", "Finn", "Fox", "Gem",
+    "Gray", "Gus", "Hana", "Hugo", "Ida", "Iris", "Ivy", "Jack", "Jade", "Jay",
+    "Jazz", "Kate", "Kay", "Kit", "Knox", "Lana", "Leo", "Levi", "Luna", "Lux",
+    "Mae", "Max", "Maya", "Mia", "Milo", "Nao", "Nash", "Nemo", "Nia", "Nix",
+    "Nova", "Oak", "Olly", "Opal", "Owen", "Pax", "Pip", "Quin", "Ray", "Reed",
+    "Rex", "Rio", "Rose", "Ruby", "Rue", "Sage", "Sam", "Shaw", "Sky", "Sol",
+    "Star", "Tao", "Tess", "Theo", "Uma", "Val", "Vex", "Wren", "Xia", "Yuki",
+    "Zane", "Zara", "Zen", "Zoe", "Zora",
+]
 
 
 class PeerRegistry:
@@ -22,6 +36,7 @@ class PeerRegistry:
                 peer_id TEXT PRIMARY KEY,
                 machine_id TEXT NOT NULL,
                 machine_name TEXT,
+                nickname TEXT DEFAULT '',
                 session_dir TEXT,
                 summary TEXT DEFAULT '',
                 is_local BOOLEAN DEFAULT 1,
@@ -41,15 +56,27 @@ class PeerRegistry:
         """)
         self.db.commit()
 
-    def register(self, peer_id, machine_id, machine_name="", session_dir="", summary=""):
+    def _generate_nickname(self):
+        """Generate a unique nickname not already in use."""
+        used = {r["nickname"] for r in self.db.execute("SELECT nickname FROM peers WHERE nickname != ''").fetchall()}
+        available = [n for n in NICKNAMES if n not in used]
+        if available:
+            return random.choice(available)
+        # Fallback: add number suffix
+        return random.choice(NICKNAMES) + str(random.randint(1, 99))
+
+    def register(self, peer_id, machine_id, machine_name="", session_dir="", summary="", nickname=""):
         now = datetime.now(timezone.utc).isoformat()
+        if not nickname:
+            nickname = self._generate_nickname()
         self.db.execute(
             """INSERT OR REPLACE INTO peers
-               (peer_id, machine_id, machine_name, session_dir, summary, is_local, last_seen, status)
-               VALUES (?, ?, ?, ?, ?, 1, ?, 'online')""",
-            (peer_id, machine_id, machine_name, session_dir, summary, now),
+               (peer_id, machine_id, machine_name, nickname, session_dir, summary, is_local, last_seen, status)
+               VALUES (?, ?, ?, ?, ?, ?, 1, ?, 'online')""",
+            (peer_id, machine_id, machine_name, nickname, session_dir, summary, now),
         )
         self.db.commit()
+        return nickname
 
     def unregister(self, peer_id):
         self.db.execute("UPDATE peers SET status='offline' WHERE peer_id=?", (peer_id,))
@@ -81,11 +108,11 @@ class PeerRegistry:
         for p in peers:
             self.db.execute(
                 """INSERT OR REPLACE INTO peers
-                   (peer_id, machine_id, machine_name, session_dir, summary, is_local, last_seen, status)
-                   VALUES (?, ?, ?, ?, ?, 0, ?, ?)""",
+                   (peer_id, machine_id, machine_name, nickname, session_dir, summary, is_local, last_seen, status)
+                   VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)""",
                 (
                     p["peer_id"], machine_id, machine_name,
-                    p.get("session_dir", ""), p.get("summary", ""),
+                    p.get("nickname", ""), p.get("session_dir", ""), p.get("summary", ""),
                     now, p.get("status", "online"),
                 ),
             )
@@ -101,9 +128,16 @@ class PeerRegistry:
         return [dict(r) for r in rows]
 
     def find_peer(self, query):
-        """Find a peer by id (full or prefix), summary substring, or machine_name:summary pattern."""
+        """Find a peer by nickname, id (full or prefix), summary, or machine_name:summary pattern."""
+        # Try nickname first (exact, case-insensitive)
+        row = self.db.execute(
+            "SELECT * FROM peers WHERE nickname=? COLLATE NOCASE AND status='online' LIMIT 1",
+            (query,),
+        ).fetchone()
+        if row:
+            return dict(row)
+
         if ":" in query and not query.startswith(("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f")):
-            # machine:summary pattern (but not a UUID with colons... UUIDs use hyphens)
             machine, summary = query.split(":", 1)
             row = self.db.execute(
                 "SELECT * FROM peers WHERE machine_name LIKE ? AND summary LIKE ? AND status='online' LIMIT 1",
@@ -115,6 +149,10 @@ class PeerRegistry:
                 (query, f"{query}%", f"%{query}%"),
             ).fetchone()
         return dict(row) if row else None
+
+    def set_nickname(self, peer_id, nickname):
+        self.db.execute("UPDATE peers SET nickname=? WHERE peer_id=?", (nickname, peer_id))
+        self.db.commit()
 
     def store_message(self, from_peer, to_peer, content):
         now = datetime.now(timezone.utc).isoformat()
@@ -152,7 +190,7 @@ class PeerRegistry:
     def get_local_peers_for_sync(self):
         """Get local peer data formatted for remote sync."""
         rows = self.db.execute(
-            "SELECT peer_id, session_dir, summary, status FROM peers WHERE is_local=1 AND status='online'"
+            "SELECT peer_id, nickname, session_dir, summary, status FROM peers WHERE is_local=1 AND status='online'"
         ).fetchall()
         return [dict(r) for r in rows]
 

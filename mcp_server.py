@@ -112,11 +112,13 @@ def stop_broker():
 
 
 def register():
-    """Register this session with the broker."""
+    """Register this session with the broker. Auto-generates summary from machine + directory."""
+    # Auto summary: last directory component
+    dir_name = Path(SESSION_DIR).name or "home"
     return broker_request("POST", "/register", {
         "peer_id": PEER_ID,
         "session_dir": SESSION_DIR,
-        "summary": "",
+        "summary": dir_name,
     })
 
 
@@ -188,9 +190,10 @@ def tool_list_peers(scope: str = "all") -> str:
     lines = []
     for p in peers:
         location = "local" if p.get("is_local") else f"remote ({p.get('machine_name', '?')})"
+        nickname = p.get("nickname", "") or "?"
         summary = p.get("summary", "") or "(no summary)"
         status = p.get("status", "?")
-        lines.append(f"- [{status}] {summary} @ {location} (id: {p['peer_id'][:8]})")
+        lines.append(f"- [{status}] {nickname} | {summary} @ {location} (id: {p['peer_id'][:8]})")
     return "\n".join(lines)
 
 
@@ -222,6 +225,14 @@ def tool_set_summary(summary: str) -> str:
         "summary": summary,
     })
     return f"Summary set to: {summary}"
+
+
+def tool_set_nickname(nickname: str) -> str:
+    broker_request("POST", "/nickname", {
+        "peer_id": PEER_ID,
+        "nickname": nickname,
+    })
+    return f"Nickname set to: {nickname}"
 
 
 def tool_status() -> str:
@@ -274,6 +285,17 @@ TOOLS = {
             "required": ["summary"],
         },
         "handler": lambda args: tool_set_summary(args["summary"]),
+    },
+    "set_nickname": {
+        "description": "Change this session's nickname. Nicknames are auto-assigned but can be changed manually.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "nickname": {"type": "string", "description": "New nickname (max 5 chars)"},
+            },
+            "required": ["nickname"],
+        },
+        "handler": lambda args: tool_set_nickname(args["nickname"]),
     },
     "mesh_status": {
         "description": "Show mesh network status: connected brokers, peer counts.",
