@@ -9,18 +9,7 @@ from pathlib import Path
 
 DEFAULT_DB_PATH = Path.home() / ".claude-mesh.db"
 
-# Short, memorable, human-like nicknames (5 chars max)
-NICKNAMES = [
-    "Ace", "Ada", "Ash", "Bay", "Bea", "Bo", "Buzz", "Cal", "Cleo", "Cody",
-    "Dana", "Dash", "Dawn", "Edy", "Eli", "Eve", "Fay", "Finn", "Fox", "Gem",
-    "Gray", "Gus", "Hana", "Hugo", "Ida", "Iris", "Ivy", "Jack", "Jade", "Jay",
-    "Jazz", "Kate", "Kay", "Kit", "Knox", "Lana", "Leo", "Levi", "Luna", "Lux",
-    "Mae", "Max", "Maya", "Mia", "Milo", "Nao", "Nash", "Nemo", "Nia", "Nix",
-    "Nova", "Oak", "Olly", "Opal", "Owen", "Pax", "Pip", "Quin", "Ray", "Reed",
-    "Rex", "Rio", "Rose", "Ruby", "Rue", "Sage", "Sam", "Shaw", "Sky", "Sol",
-    "Star", "Tao", "Tess", "Theo", "Uma", "Val", "Vex", "Wren", "Xia", "Yuki",
-    "Zane", "Zara", "Zen", "Zoe", "Zora",
-]
+from nicknames import NICKNAMES
 
 
 class PeerRegistry:
