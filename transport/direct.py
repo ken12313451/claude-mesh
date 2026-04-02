@@ -72,7 +72,7 @@ class DirectTransport(Transport):
             self._connections.pop(machine_id, None)
             return False
         try:
-            data = json.dumps(message)
+            data = json.dumps(message, ensure_ascii=False)
             await ws.send(data)
             logger.info(f"Sent {len(data)} bytes to {machine_id}")
             return True
@@ -82,7 +82,7 @@ class DirectTransport(Transport):
             return False
 
     async def broadcast(self, message: dict):
-        data = json.dumps(message)
+        data = json.dumps(message, ensure_ascii=False)
         dead = []
         for mid, ws in self._connections.items():
             try:

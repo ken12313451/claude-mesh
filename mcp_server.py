@@ -44,7 +44,7 @@ def broker_request(method: str, path: str, body: dict | None = None) -> dict:
     conn = HTTPConnection(BROKER_HOST, BROKER_PORT, timeout=5)
     try:
         if body is not None:
-            data = json.dumps(body).encode()
+            data = json.dumps(body, ensure_ascii=False).encode("utf-8")
             conn.request(method, path, body=data,
                          headers={"Content-Type": "application/json",
                                   "Content-Length": str(len(data))})
@@ -118,7 +118,7 @@ def send_mcp_notification(method: str, params: dict):
         "params": params,
     }
     with _stdout_lock:
-        sys.stdout.write(json.dumps(notification) + "\n")
+        sys.stdout.write(json.dumps(notification, ensure_ascii=False) + "\n")
         sys.stdout.flush()
 
 
@@ -362,7 +362,7 @@ def main():
             response = handle_jsonrpc(request)
             if response is not None:
                 with _stdout_lock:
-                    sys.stdout.write(json.dumps(response) + "\n")
+                    sys.stdout.write(json.dumps(response, ensure_ascii=False) + "\n")
                     sys.stdout.flush()
         except json.JSONDecodeError:
             pass
@@ -373,7 +373,7 @@ def main():
                 "error": {"code": -32603, "message": str(e)},
             }
             with _stdout_lock:
-                sys.stdout.write(json.dumps(error_resp) + "\n")
+                sys.stdout.write(json.dumps(error_resp, ensure_ascii=False) + "\n")
                 sys.stdout.flush()
 
 
