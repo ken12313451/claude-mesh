@@ -118,11 +118,16 @@ class DirectTransport(Transport):
                 try:
                     data = json.loads(raw)
                     for cb in self._callbacks:
-                        await cb(remote_id, data)
+                        try:
+                            await cb(remote_id, data)
+                        except Exception as e:
+                            logger.error(f"Callback error for {remote_id}: {e}")
                 except json.JSONDecodeError:
                     pass
-        except (asyncio.TimeoutError, websockets.exceptions.ConnectionClosed):
-            pass
+                except Exception as e:
+                    logger.error(f"Message processing error from {remote_id}: {e}")
+        except (asyncio.TimeoutError, websockets.exceptions.ConnectionClosed) as e:
+            logger.info(f"Connection to {remote_id} ended: {e}")
         finally:
             if remote_id:
                 self._connections.pop(remote_id, None)
@@ -183,12 +188,17 @@ class DirectTransport(Transport):
                             try:
                                 data = json.loads(raw)
                                 for cb in self._callbacks:
-                                    await cb(remote_id, data)
+                                    try:
+                                        await cb(remote_id, data)
+                                    except Exception as e:
+                                        logger.error(f"Callback error for {remote_id}: {e}")
                             except json.JSONDecodeError:
                                 pass
+                            except Exception as e:
+                                logger.error(f"Message processing error from {remote_id}: {e}")
 
                 except (ConnectionRefusedError, OSError, websockets.exceptions.ConnectionClosed) as e:
-                    logger.debug(f"Connection to {address} failed: {e}")
+                    logger.info(f"Connection to {address} lost: {e}")
                 except asyncio.CancelledError:
                     return
 
