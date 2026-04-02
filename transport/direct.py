@@ -97,21 +97,14 @@ class DirectTransport(Transport):
             remote_id = msg["machine_id"]
             logger.info(f"Incoming connection from {remote_id}")
 
-            # If already connected, keep the one from the lexicographically smaller machine_id
+            # Replace any existing connection (incoming is from the smaller machine_id = the rightful client)
             if remote_id in self._connections:
-                if self.machine_id < remote_id:
-                    # We are the "client" side, keep our outgoing connection
-                    logger.info(f"Already connected to {remote_id} (we are client), rejecting incoming")
-                    await websocket.close(1000, "Already connected")
-                    return
-                else:
-                    # They are the "client" side, replace our connection with theirs
-                    old = self._connections.pop(remote_id)
-                    try:
-                        await old.close()
-                    except Exception:
-                        pass
-                    logger.info(f"Replacing outgoing to {remote_id} with incoming")
+                old = self._connections.pop(remote_id)
+                try:
+                    await old.close()
+                except Exception:
+                    pass
+                logger.info(f"Replacing existing connection to {remote_id}")
 
             # Send our hello back
             await websocket.send(json.dumps({
@@ -136,63 +129,71 @@ class DirectTransport(Transport):
                 logger.info(f"Connection from {remote_id} closed")
 
     async def _connect_to_peer(self, address: str):
-        """Maintain a persistent connection to a known peer."""
+        """Maintain a persistent connection to a known peer.
+
+        Connection direction is determined by machine_id ordering:
+        the lexicographically smaller machine_id is the "client" (outgoing).
+        The larger one only accepts incoming connections.
+        """
         while True:
-            try:
-                uri = f"ws://{address}"
-                async with websockets.connect(
-                    uri, ping_interval=60, ping_timeout=30,
-                ) as ws:
-                    # Send hello
-                    await ws.send(json.dumps({
-                        "type": "hello",
-                        "machine_id": self.machine_id,
-                        "auth_key": self.auth_key,
-                    }))
+            # If we already have a connection (from incoming), just monitor it
+            for mid, ws in list(self._connections.items()):
+                if not ws.closed:
+                    await asyncio.sleep(10)
+                    break
+            else:
+                # No active connections, try to connect
+                try:
+                    uri = f"ws://{address}"
+                    async with websockets.connect(
+                        uri, ping_interval=60, ping_timeout=30,
+                    ) as ws:
+                        # Send hello
+                        await ws.send(json.dumps({
+                            "type": "hello",
+                            "machine_id": self.machine_id,
+                            "auth_key": self.auth_key,
+                        }))
 
-                    # Wait for ack
-                    raw = await asyncio.wait_for(ws.recv(), timeout=10)
-                    msg = json.loads(raw)
-                    if msg.get("type") != "hello_ack":
-                        logger.warning(f"Unexpected ack from {address}: {msg}")
-                        await asyncio.sleep(5)
-                        continue
-
-                    remote_id = msg["machine_id"]
-
-                    # Resolve dual connection: smaller machine_id is the "client"
-                    if remote_id in self._connections:
-                        if self.machine_id < remote_id:
-                            # We should be client — replace incoming with outgoing
-                            old = self._connections.pop(remote_id)
-                            try:
-                                await old.close()
-                            except Exception:
-                                pass
-                            logger.info(f"Replacing incoming from {remote_id} with outgoing")
-                        else:
-                            # They should be client — keep their incoming, drop ours
-                            logger.info(f"Already connected to {remote_id} via incoming, dropping outgoing")
-                            # Wait until the connection drops, then retry
-                            while remote_id in self._connections:
-                                await asyncio.sleep(5)
+                        # Wait for ack
+                        raw = await asyncio.wait_for(ws.recv(), timeout=10)
+                        msg = json.loads(raw)
+                        if msg.get("type") != "hello_ack":
+                            logger.warning(f"Unexpected ack from {address}: {msg}")
+                            await asyncio.sleep(5)
                             continue
 
-                    logger.info(f"Connected to {remote_id} at {address}")
-                    self._connections[remote_id] = ws
+                        remote_id = msg["machine_id"]
 
-                    async for raw in ws:
-                        try:
-                            data = json.loads(raw)
-                            for cb in self._callbacks:
-                                await cb(remote_id, data)
-                        except json.JSONDecodeError:
-                            pass
+                        # If we're the larger machine_id, we shouldn't be client
+                        if self.machine_id > remote_id:
+                            logger.info(f"We ({self.machine_id}) > {remote_id}, waiting for their outgoing connection")
+                            await asyncio.sleep(10)
+                            continue
 
-            except (ConnectionRefusedError, OSError, websockets.exceptions.ConnectionClosed) as e:
-                logger.debug(f"Connection to {address} failed: {e}")
-            except asyncio.CancelledError:
-                return
+                        # If incoming appeared while we were connecting
+                        if remote_id in self._connections:
+                            logger.info(f"Already connected to {remote_id}, skipping")
+                            continue
 
-            # Reconnect after delay
+                        logger.info(f"Connected to {remote_id} at {address}")
+                        self._connections[remote_id] = ws
+
+                        async for raw in ws:
+                            try:
+                                data = json.loads(raw)
+                                for cb in self._callbacks:
+                                    await cb(remote_id, data)
+                            except json.JSONDecodeError:
+                                pass
+
+                except (ConnectionRefusedError, OSError, websockets.exceptions.ConnectionClosed) as e:
+                    logger.debug(f"Connection to {address} failed: {e}")
+                except asyncio.CancelledError:
+                    return
+
+                # Reconnect after delay
+                await asyncio.sleep(5)
+                continue
+
             await asyncio.sleep(5)
