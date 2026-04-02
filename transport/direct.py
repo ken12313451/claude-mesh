@@ -129,6 +129,13 @@ class DirectTransport(Transport):
     async def _connect_to_peer(self, address: str):
         """Maintain a persistent connection to a known peer."""
         while True:
+            # If already connected via incoming, wait and check periodically
+            connected_ids = [mid for mid, ws in self._connections.items()
+                            if not ws.closed]
+            if connected_ids:
+                await asyncio.sleep(10)
+                continue
+
             try:
                 uri = f"ws://{address}"
                 async with websockets.connect(
@@ -150,7 +157,7 @@ class DirectTransport(Transport):
 
                     remote_id = msg["machine_id"]
 
-                    # Skip if already connected (incoming connection exists)
+                    # If incoming connection appeared while we were connecting
                     if remote_id in self._connections:
                         logger.info(f"Already connected to {remote_id}, closing outgoing")
                         continue
