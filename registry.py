@@ -118,6 +118,8 @@ class PeerRegistry:
 
     def store_message(self, from_peer, to_peer, content):
         now = datetime.now(timezone.utc).isoformat()
+        # Sanitize surrogates that can appear from Windows encoding issues
+        content = content.encode("utf-8", errors="replace").decode("utf-8")
         self.db.execute(
             "INSERT INTO messages (from_peer, to_peer, content, timestamp) VALUES (?, ?, ?, ?)",
             (from_peer, to_peer, content, now),
