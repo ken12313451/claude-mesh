@@ -39,12 +39,18 @@ _broker_process = None
 _stdout_lock = threading.Lock()
 
 
+def _sanitize_surrogates(s: str) -> str:
+    """Remove surrogate characters that break UTF-8 encoding on Windows."""
+    return s.encode("utf-8", errors="replace").decode("utf-8")
+
+
 def broker_request(method: str, path: str, body: dict | None = None) -> dict:
     """Make a request to the local Mesh Broker API."""
     conn = HTTPConnection(BROKER_HOST, BROKER_PORT, timeout=5)
     try:
         if body is not None:
-            data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+            raw = json.dumps(body, ensure_ascii=False)
+            data = _sanitize_surrogates(raw).encode("utf-8")
             conn.request(method, path, body=data,
                          headers={"Content-Type": "application/json",
                                   "Content-Length": str(len(data))})
@@ -362,7 +368,8 @@ def main():
             response = handle_jsonrpc(request)
             if response is not None:
                 with _stdout_lock:
-                    sys.stdout.write(json.dumps(response, ensure_ascii=False) + "\n")
+                    out = _sanitize_surrogates(json.dumps(response, ensure_ascii=False))
+                    sys.stdout.write(out + "\n")
                     sys.stdout.flush()
         except json.JSONDecodeError:
             pass
