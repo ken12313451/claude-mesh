@@ -95,6 +95,13 @@ class DirectTransport(Transport):
                 await websocket.close(1008, "Auth failed")
                 return
             remote_id = msg["machine_id"]
+
+            # Reject if already connected (avoid dual connections)
+            if remote_id in self._connections:
+                logger.info(f"Already connected to {remote_id}, rejecting incoming")
+                await websocket.close(1000, "Already connected")
+                return
+
             logger.info(f"Incoming connection from {remote_id}")
 
             # Send our hello back
@@ -142,6 +149,12 @@ class DirectTransport(Transport):
                         continue
 
                     remote_id = msg["machine_id"]
+
+                    # Skip if already connected (incoming connection exists)
+                    if remote_id in self._connections:
+                        logger.info(f"Already connected to {remote_id}, closing outgoing")
+                        continue
+
                     logger.info(f"Connected to {remote_id} at {address}")
                     self._connections[remote_id] = ws
 
