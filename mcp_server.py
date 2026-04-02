@@ -123,22 +123,29 @@ def send_mcp_notification(method: str, params: dict):
 
 
 def message_poller():
-    """Background thread that polls for new messages and pushes via channel protocol.
+    """Background thread: heartbeat, message polling, and channel push.
 
-    Uses mark_read=false so messages remain unread for check_messages tool.
-    Tracks notified message IDs to avoid duplicate notifications.
-    Uses notifications/claude/channel for real-time push to Claude Code.
+    - Sends heartbeat every cycle to keep peer alive in registry
+    - Polls for new messages with mark_read=false
+    - Pushes via notifications/claude/channel for real-time delivery
     """
     notified_ids = set()
+    heartbeat_counter = 0
     while True:
         try:
+            # Heartbeat every 30 seconds (10 cycles * 3s interval)
+            heartbeat_counter += 1
+            if heartbeat_counter >= 10:
+                broker_request("POST", "/heartbeat", {"peer_id": PEER_ID})
+                heartbeat_counter = 0
+
+            # Poll for messages
             result = broker_request("GET", f"/messages?peer_id={PEER_ID}&mark_read=false")
             messages = result.get("messages", [])
             for m in messages:
                 msg_id = m.get("id")
                 if msg_id not in notified_ids:
                     notified_ids.add(msg_id)
-                    # Use claude/channel protocol for real-time push
                     send_mcp_notification("notifications/claude/channel", {
                         "content": m["content"],
                         "meta": {
