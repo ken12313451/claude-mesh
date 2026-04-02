@@ -61,10 +61,16 @@ class DirectTransport(Transport):
     async def send(self, machine_id: str, message: dict):
         ws = self._connections.get(machine_id)
         if not ws:
-            logger.warning(f"No connection to {machine_id}")
+            logger.warning(f"No connection to {machine_id}, available: {list(self._connections.keys())}")
+            return False
+        if ws.closed:
+            logger.warning(f"Connection to {machine_id} is closed, removing")
+            self._connections.pop(machine_id, None)
             return False
         try:
-            await ws.send(json.dumps(message))
+            data = json.dumps(message)
+            await ws.send(data)
+            logger.info(f"Sent {len(data)} bytes to {machine_id}")
             return True
         except Exception as e:
             logger.error(f"Send to {machine_id} failed: {e}")
