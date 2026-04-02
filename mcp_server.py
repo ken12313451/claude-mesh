@@ -193,7 +193,8 @@ def tool_list_peers(scope: str = "all") -> str:
         nickname = p.get("nickname", "") or "?"
         summary = p.get("summary", "") or "(no summary)"
         status = p.get("status", "?")
-        lines.append(f"- [{status}] {nickname} | {summary} @ {location} (id: {p['peer_id'][:8]})")
+        me = " ← YOU" if p["peer_id"] == PEER_ID else ""
+        lines.append(f"- [{status}] {nickname} | {summary} @ {location} (id: {p['peer_id'][:8]}){me}")
     return "\n".join(lines)
 
 
@@ -237,6 +238,14 @@ def tool_set_nickname(nickname: str) -> str:
 
 def tool_status() -> str:
     result = broker_request("GET", "/status")
+    # Add own peer info
+    peers = broker_request("GET", "/peers?scope=local")
+    for p in peers.get("peers", []):
+        if p["peer_id"] == PEER_ID:
+            result["my_peer_id"] = PEER_ID
+            result["my_nickname"] = p.get("nickname", "?")
+            result["my_summary"] = p.get("summary", "")
+            break
     return json.dumps(result, indent=2, ensure_ascii=False)
 
 
