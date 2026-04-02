@@ -167,7 +167,11 @@ Claude@A14 → "Home-PCのRCにレビュー依頼"
 | 3 | Mesh Broker (ローカルAPI + peer同期) | ✅ 完了 |
 | 4 | MCP Server (stdio) | ✅ 完了 |
 | 5 | 2台で動作テスト | ✅ 完了 (2026-04-02) |
-| 6 | RelayTransport追加 | 未着手 |
+| 6 | broker自動起動 + heartbeat + stale cleanup | ✅ 完了 |
+| 7 | channels リアルタイム通知 | ✅ 完了 |
+| 8 | 日本語対応（UTF-8強制） | ✅ 完了 |
+| 9 | ブロードキャスト（全peer一斉送信） | 未着手 |
+| 10 | RelayTransport追加 | 未着手 |
 
 ## claude-peers-mcp との違い
 
