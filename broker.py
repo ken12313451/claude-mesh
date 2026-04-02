@@ -190,12 +190,14 @@ class MeshBroker:
                 self.registry.store_message(from_peer, target["peer_id"], content)
             else:
                 # Remote delivery via transport
-                await self.transport.send(target["machine_id"], {
+                sent = await self.transport.send(target["machine_id"], {
                     "type": "message_remote",
                     "from": from_peer,
                     "to": target["peer_id"],
                     "content": content,
                 })
+                if not sent:
+                    return {"status": "error", "message": f"Failed to send to remote broker {target['machine_id']}"}
 
             return {"status": "ok", "delivered_to": target["peer_id"]}
 
