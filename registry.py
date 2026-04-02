@@ -145,9 +145,34 @@ class PeerRegistry:
     def get_local_peers_for_sync(self):
         """Get local peer data formatted for remote sync."""
         rows = self.db.execute(
-            "SELECT peer_id, session_dir, summary, status FROM peers WHERE is_local=1"
+            "SELECT peer_id, session_dir, summary, status FROM peers WHERE is_local=1 AND status='online'"
         ).fetchall()
         return [dict(r) for r in rows]
+
+    def cleanup_stale_peers(self, offline_after_seconds=300, delete_after_seconds=600):
+        """Mark stale peers as offline, delete very old ones.
+
+        offline_after_seconds: mark as offline if no heartbeat (default 5 min)
+        delete_after_seconds: delete entirely if no heartbeat (default 10 min)
+        """
+        now = datetime.now(timezone.utc)
+        rows = self.db.execute(
+            "SELECT peer_id, last_seen, status, is_local FROM peers"
+        ).fetchall()
+        for r in rows:
+            try:
+                last_seen = datetime.fromisoformat(r["last_seen"])
+                age = (now - last_seen).total_seconds()
+                if age > delete_after_seconds:
+                    self.db.execute("DELETE FROM peers WHERE peer_id=?", (r["peer_id"],))
+                elif age > offline_after_seconds and r["status"] == "online":
+                    self.db.execute(
+                        "UPDATE peers SET status='offline' WHERE peer_id=?",
+                        (r["peer_id"],),
+                    )
+            except (ValueError, TypeError):
+                continue
+        self.db.commit()
 
     def close(self):
         self.db.close()

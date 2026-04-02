@@ -51,9 +51,12 @@ class MeshBroker:
     # --- Remote broker communication ---
 
     async def _sync_loop(self):
-        """Periodically broadcast local peer info to remote brokers."""
+        """Periodically broadcast local peer info and clean up stale peers."""
         while True:
             try:
+                # Clean up stale peers first
+                self.registry.cleanup_stale_peers()
+
                 local_peers = self.registry.get_local_peers_for_sync()
                 await self.transport.broadcast({
                     "type": "peer_sync",
