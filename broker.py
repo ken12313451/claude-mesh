@@ -192,15 +192,16 @@ class MeshBroker:
             return {"status": "ok", "delivered_to": target["peer_id"]}
 
         elif method == "GET" and path.startswith("/messages"):
-            # /messages?peer_id=xxx
+            # /messages?peer_id=xxx&mark_read=true (default: true)
             params = {}
             if "?" in path:
                 params = dict(p.split("=") for p in path.split("?")[1].split("&") if "=" in p)
             peer_id = params.get("peer_id", "")
+            mark_read = params.get("mark_read", "true").lower() != "false"
             messages = self.registry.get_messages(peer_id)
-            # Mark as read
-            msg_ids = [m["id"] for m in messages]
-            self.registry.mark_read(msg_ids)
+            if mark_read:
+                msg_ids = [m["id"] for m in messages]
+                self.registry.mark_read(msg_ids)
             return {"messages": messages}
 
         elif method == "GET" and path == "/status":
