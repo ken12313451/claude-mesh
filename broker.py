@@ -149,14 +149,14 @@ class MeshBroker:
 
     async def _route(self, method: str, path: str, body: dict | None) -> dict:
         if method == "POST" and path == "/register":
-            self.registry.register(
+            nickname = self.registry.register(
                 peer_id=body["peer_id"],
                 machine_id=self.config.machine_id,
                 machine_name=self.config.machine_name,
                 session_dir=body.get("session_dir", ""),
                 summary=body.get("summary", ""),
             )
-            return {"status": "ok"}
+            return {"status": "ok", "nickname": nickname}
 
         elif method == "POST" and path == "/unregister":
             self.registry.unregister(body["peer_id"])
@@ -164,6 +164,10 @@ class MeshBroker:
 
         elif method == "POST" and path in ("/summary", "/set_summary"):
             self.registry.set_summary(body["peer_id"], body["summary"])
+            return {"status": "ok"}
+
+        elif method == "POST" and path == "/nickname":
+            self.registry.set_nickname(body["peer_id"], body["nickname"])
             return {"status": "ok"}
 
         elif method == "POST" and path == "/heartbeat":
