@@ -54,8 +54,17 @@ class MeshConfig:
         return self._data.get("local_api_port", 7901)
 
     @property
-    def known_peers(self) -> list[str]:
-        return self._data.get("known_peers", [])
+    def known_peers(self) -> dict[str, str]:
+        """Return known peers as {machine_id: address}.
+
+        Supports both formats:
+        - New: {"home-pc": "100.83.52.116:7900"}
+        - Legacy: ["100.83.52.116:7900"] (treated as unknown machine_id)
+        """
+        raw = self._data.get("known_peers", {})
+        if isinstance(raw, list):
+            return {f"unknown-{i}": addr for i, addr in enumerate(raw)}
+        return raw
 
     @property
     def auth_key(self) -> str:
