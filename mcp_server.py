@@ -2,12 +2,17 @@
 
 Each Claude Code session runs this as an MCP server (stdio transport).
 Communicates with the local Mesh Broker via HTTP on localhost:7901.
+Auto-starts the broker if not running.
+Polls for new messages and delivers them as MCP notifications.
 """
 
-import asyncio
+import atexit
 import json
 import os
+import subprocess
 import sys
+import threading
+import time
 import uuid
 from http.client import HTTPConnection
 from pathlib import Path
@@ -17,9 +22,21 @@ from pathlib import Path
 BROKER_HOST = "127.0.0.1"
 BROKER_PORT = int(os.environ.get("CLAUDE_MESH_BROKER_PORT", "7901"))
 
+# Path to broker.py (same directory as this file)
+BROKER_SCRIPT = Path(__file__).parent / "broker.py"
+
 # This session's identity
 PEER_ID = str(uuid.uuid4())
 SESSION_DIR = os.getcwd()
+
+# Message polling interval (seconds)
+POLL_INTERVAL = 3
+
+# Broker subprocess (if we started it)
+_broker_process = None
+
+# Lock for stdout (MCP stdio is single-threaded but we have a poller thread)
+_stdout_lock = threading.Lock()
 
 
 def broker_request(method: str, path: str, body: dict | None = None) -> dict:
@@ -41,6 +58,44 @@ def broker_request(method: str, path: str, body: dict | None = None) -> dict:
         conn.close()
 
 
+def is_broker_running() -> bool:
+    """Check if broker is responding."""
+    try:
+        result = broker_request("GET", "/status")
+        return result.get("machine_id") is not None
+    except Exception:
+        return False
+
+
+def ensure_broker():
+    """Start broker as subprocess if not already running."""
+    global _broker_process
+    if is_broker_running():
+        return
+
+    _broker_process = subprocess.Popen(
+        [sys.executable, str(BROKER_SCRIPT)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+
+    # Wait for broker to be ready
+    for _ in range(20):
+        time.sleep(0.5)
+        if is_broker_running():
+            return
+    # If still not ready, continue anyway — tools will report errors
+
+
+def stop_broker():
+    """Stop broker if we started it."""
+    global _broker_process
+    if _broker_process:
+        _broker_process.terminate()
+        _broker_process = None
+
+
 def register():
     """Register this session with the broker."""
     return broker_request("POST", "/register", {
@@ -52,7 +107,37 @@ def register():
 
 def unregister():
     """Unregister this session."""
-    return broker_request("POST", "/unregister", {"peer_id": PEER_ID})
+    broker_request("POST", "/unregister", {"peer_id": PEER_ID})
+
+
+def send_mcp_notification(method: str, params: dict):
+    """Send a JSON-RPC notification to Claude Code via stdout."""
+    notification = {
+        "jsonrpc": "2.0",
+        "method": method,
+        "params": params,
+    }
+    with _stdout_lock:
+        sys.stdout.write(json.dumps(notification) + "\n")
+        sys.stdout.flush()
+
+
+def message_poller():
+    """Background thread that polls for new messages and sends MCP notifications."""
+    while True:
+        try:
+            result = broker_request("GET", f"/messages?peer_id={PEER_ID}")
+            messages = result.get("messages", [])
+            if messages:
+                for m in messages:
+                    send_mcp_notification("notifications/message", {
+                        "level": "info",
+                        "logger": "claude-mesh",
+                        "data": f"Message from {m['from_peer'][:8]}: {m['content']}",
+                    })
+        except Exception:
+            pass
+        time.sleep(POLL_INTERVAL)
 
 
 # --- MCP Tool implementations ---
@@ -167,19 +252,23 @@ def handle_jsonrpc(request: dict) -> dict:
     params = request.get("params", {})
 
     if method == "initialize":
+        # Auto-start broker if needed
+        ensure_broker()
         return {
             "jsonrpc": "2.0",
             "id": req_id,
             "result": {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {"tools": {}},
-                "serverInfo": {"name": "claude-mesh", "version": "0.1.0"},
+                "serverInfo": {"name": "claude-mesh", "version": "0.2.0"},
             },
         }
 
     elif method == "notifications/initialized":
-        # Register with broker on init
+        # Register with broker and start message poller
         register()
+        poller = threading.Thread(target=message_poller, daemon=True)
+        poller.start()
         return None  # Notification, no response
 
     elif method == "tools/list":
@@ -230,7 +319,6 @@ def handle_jsonrpc(request: dict) -> dict:
 
 def main():
     """Run MCP server on stdio."""
-    import atexit
     atexit.register(unregister)
 
     for line in sys.stdin:
@@ -241,8 +329,9 @@ def main():
             request = json.loads(line)
             response = handle_jsonrpc(request)
             if response is not None:
-                sys.stdout.write(json.dumps(response) + "\n")
-                sys.stdout.flush()
+                with _stdout_lock:
+                    sys.stdout.write(json.dumps(response) + "\n")
+                    sys.stdout.flush()
         except json.JSONDecodeError:
             pass
         except Exception as e:
@@ -251,8 +340,9 @@ def main():
                 "id": None,
                 "error": {"code": -32603, "message": str(e)},
             }
-            sys.stdout.write(json.dumps(error_resp) + "\n")
-            sys.stdout.flush()
+            with _stdout_lock:
+                sys.stdout.write(json.dumps(error_resp) + "\n")
+                sys.stdout.flush()
 
 
 if __name__ == "__main__":
