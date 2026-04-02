@@ -101,8 +101,9 @@ class PeerRegistry:
         return [dict(r) for r in rows]
 
     def find_peer(self, query):
-        """Find a peer by id, summary substring, or machine_name:summary pattern."""
-        if ":" in query:
+        """Find a peer by id (full or prefix), summary substring, or machine_name:summary pattern."""
+        if ":" in query and not query.startswith(("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f")):
+            # machine:summary pattern (but not a UUID with colons... UUIDs use hyphens)
             machine, summary = query.split(":", 1)
             row = self.db.execute(
                 "SELECT * FROM peers WHERE machine_name LIKE ? AND summary LIKE ? AND status='online' LIMIT 1",
@@ -110,8 +111,8 @@ class PeerRegistry:
             ).fetchone()
         else:
             row = self.db.execute(
-                "SELECT * FROM peers WHERE peer_id=? OR summary LIKE ?",
-                (query, f"%{query}%"),
+                "SELECT * FROM peers WHERE peer_id=? OR peer_id LIKE ? OR summary LIKE ?",
+                (query, f"{query}%", f"%{query}%"),
             ).fetchone()
         return dict(row) if row else None
 
