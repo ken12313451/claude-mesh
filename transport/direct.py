@@ -67,7 +67,7 @@ class DirectTransport(Transport):
         if not ws:
             logger.warning(f"No connection to {machine_id}, available: {list(self._connections.keys())}")
             return False
-        if ws.closed:
+        if ws.close_code is not None:
             logger.warning(f"Connection to {machine_id} is closed, removing")
             self._connections.pop(machine_id, None)
             return False
