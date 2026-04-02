@@ -59,12 +59,16 @@ class PeerRegistry:
         self.db.execute("UPDATE peers SET summary=? WHERE peer_id=?", (summary, peer_id))
         self.db.commit()
 
-    def heartbeat(self, peer_id):
+    def heartbeat(self, peer_id, machine_id="", machine_name="", session_dir="", summary=""):
+        """Update last_seen, or re-register if peer was cleaned up."""
         now = datetime.now(timezone.utc).isoformat()
-        self.db.execute(
+        rows = self.db.execute(
             "UPDATE peers SET last_seen=?, status='online' WHERE peer_id=?",
             (now, peer_id),
-        )
+        ).rowcount
+        if rows == 0 and machine_id:
+            # Peer was cleaned up, re-register
+            self.register(peer_id, machine_id, machine_name, session_dir, summary)
         self.db.commit()
 
     def update_remote_peers(self, machine_id, machine_name, peers):

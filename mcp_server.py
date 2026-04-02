@@ -136,7 +136,10 @@ def message_poller():
             # Heartbeat every 30 seconds (10 cycles * 3s interval)
             heartbeat_counter += 1
             if heartbeat_counter >= 10:
-                broker_request("POST", "/heartbeat", {"peer_id": PEER_ID})
+                broker_request("POST", "/heartbeat", {
+                    "peer_id": PEER_ID,
+                    "session_dir": SESSION_DIR,
+                })
                 heartbeat_counter = 0
 
             # Poll for messages
