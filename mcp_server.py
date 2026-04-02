@@ -323,19 +323,25 @@ def handle_jsonrpc(request: dict) -> dict:
                     "tools": {},
                     "experimental": {"claude/channel": {}},
                 },
-                "serverInfo": {"name": "claude-mesh", "version": "0.3.0"},
+                "serverInfo": {"name": "claude-mesh", "version": "0.4.0"},
                 "instructions": (
                     "You are connected to claude-mesh, a distributed mesh network for Claude Code sessions. "
                     "When you receive a <channel source=\"claude-mesh\"> message, respond immediately using "
                     "send_message tool with the from_id as the target. "
-                    "On startup, call set_summary to identify yourself to other peers."
+                    "On startup, your nickname is automatically assigned. Use list_peers to see all peers."
                 ),
             },
         }
 
     elif method == "notifications/initialized":
         # Register with broker and start message poller
-        register()
+        result = register()
+        nickname = result.get("nickname", "?")
+        # Notify Claude of its nickname via channel
+        send_mcp_notification("notifications/claude/channel", {
+            "content": f"[claude-mesh] You are '{nickname}' on {SESSION_DIR}",
+            "meta": {"from_id": "system", "from_summary": "claude-mesh", "sent_at": ""},
+        })
         poller = threading.Thread(target=message_poller, daemon=True)
         poller.start()
         return None  # Notification, no response
