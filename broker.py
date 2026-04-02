@@ -7,7 +7,15 @@ and exposes a local HTTP API for MCP servers to interact with.
 import asyncio
 import json
 import logging
-from http import HTTPStatus
+import os
+import sys
+
+# Ensure UTF-8 for all I/O on Windows
+os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+if sys.stdout.encoding != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8")
+if sys.stderr.encoding != "utf-8":
+    sys.stderr.reconfigure(encoding="utf-8")
 
 from config import MeshConfig
 from registry import PeerRegistry
