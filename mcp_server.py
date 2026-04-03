@@ -95,6 +95,7 @@ _broker_process = None
 _stdout_lock = threading.Lock()
 
 
+
 def _sanitize_surrogates(s: str) -> str:
     """Remove surrogate characters that break UTF-8 encoding on Windows."""
     return s.encode("utf-8", errors="replace").decode("utf-8")
@@ -237,14 +238,9 @@ def message_poller():
                             "content": f"{BG}  {line}{RST}",
                             "meta": {"from_id": "system", "from_summary": "", "sent_at": ""},
                         })
-                    # Send footer
+                    # Send footer (with full meta for AI context)
                     send_mcp_notification("notifications/claude/channel", {
                         "content": f"{BG}{colored_header}{RST}",
-                        "meta": {"from_id": "system", "from_summary": "", "sent_at": ""},
-                    })
-                    # Main notification for AI context (full message)
-                    send_mcp_notification("notifications/claude/channel", {
-                        "content": f"[{colored_name}] {m['content']}",
                         "meta": {
                             "from_id": m["from_peer"],
                             "from_nickname": from_nick,
