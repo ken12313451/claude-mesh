@@ -30,6 +30,18 @@ from pathlib import Path
 NICK_FILE = Path.home() / ".claude-mesh-nick"
 
 
+_RAINBOW_COLORS = [196, 208, 226, 46, 51, 129]  # red, orange, yellow, green, cyan, purple
+
+
+def _rainbow(text: str) -> str:
+    """Apply rainbow ANSI colors to text."""
+    result = ""
+    for i, ch in enumerate(text):
+        c = _RAINBOW_COLORS[i % len(_RAINBOW_COLORS)]
+        result += f"\x1b[38;5;{c}m{ch}"
+    return result + "\x1b[0m"
+
+
 def _normalize_path(p: str) -> str:
     """Normalize path for cross-format comparison (Git Bash vs Windows)."""
     return p.replace("\\", "/").lower().rstrip("/")
@@ -207,8 +219,9 @@ def message_poller():
                     notified_ids.add(msg_id)
                     from_nick = m.get("from_nickname", "")
                     from_label = from_nick or m["from_peer"][:8]
+                    colored_label = _rainbow(from_label)
                     send_mcp_notification("notifications/claude/channel", {
-                        "content": f"[{from_label}] {m['content']}",
+                        "content": f"[{colored_label}] {m['content']}",
                         "meta": {
                             "from_id": m["from_peer"],
                             "from_nickname": from_nick,
