@@ -272,7 +272,7 @@ def tool_list_peers(scope: str = "all") -> str:
     return "\n".join(lines)
 
 
-def _split_message(message: str, max_width: int = 40) -> list[str]:
+def _split_message(message: str, max_width: int = 25) -> list[str]:
     """Split message into lines of max_width full-width characters.
     ASCII counts as 0.5, non-ASCII as 1.0 (full-width)."""
     lines = []
