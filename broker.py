@@ -224,6 +224,10 @@ class MeshBroker:
             if mark_read:
                 msg_ids = [m["id"] for m in messages]
                 self.registry.mark_read(msg_ids)
+            # Enrich messages with sender nickname
+            for m in messages:
+                sender = self.registry.find_peer(m["from_peer"])
+                m["from_nickname"] = sender.get("nickname", "") if sender else ""
             return {"messages": messages}
 
         elif method == "GET" and path == "/status":
