@@ -409,7 +409,7 @@ def handle_jsonrpc(request: dict) -> dict:
                     "tools": {},
                     "experimental": {"claude/channel": {}},
                 },
-                "serverInfo": {"name": "claude-mesh", "version": "0.4.1"},
+                "serverInfo": {"name": "mesh", "version": "0.5.0"},
                 "instructions": (
                     "You are connected to claude-mesh, a distributed mesh network for Claude Code sessions. "
                     "IMPORTANT: On your FIRST response to the user, call mesh_status and list_peers, then "
