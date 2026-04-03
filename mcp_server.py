@@ -272,7 +272,40 @@ def tool_list_peers(scope: str = "all") -> str:
     return "\n".join(lines)
 
 
+def _split_message(message: str, max_width: int = 40) -> list[str]:
+    """Split message into lines of max_width full-width characters.
+    ASCII counts as 0.5, non-ASCII as 1.0 (full-width)."""
+    lines = []
+    for raw_line in message.split("\n"):
+        if not raw_line:
+            lines.append("")
+            continue
+        buf = ""
+        width = 0
+        for ch in raw_line:
+            w = 0.5 if ord(ch) < 128 else 1.0
+            if width + w > max_width:
+                lines.append(buf)
+                buf = ch
+                width = w
+            else:
+                buf += ch
+                width += w
+        if buf:
+            lines.append(buf)
+    return lines
+
+
 def tool_send_message(to: str, message: str) -> str:
+    # Auto-split long messages into single-line sends
+    msg_lines = _split_message(message)
+    if len(msg_lines) > 1:
+        all_results = []
+        for line in msg_lines:
+            result = tool_send_message(to, line)
+            all_results.append(result)
+        return all_results[-1]  # Return last result
+
     # Phase 10: broadcast to all peers
     if to.lower() == "all":
         peers = broker_request("GET", "/peers?scope=all").get("peers", [])
