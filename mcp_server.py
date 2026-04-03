@@ -222,10 +222,25 @@ def message_poller():
                     from_nick = m.get("from_nickname", "")
                     from_label = from_nick or m["from_peer"][:8]
                     colored_name = _rainbow(from_label)
-                    # Full message to stderr (visible in terminal)
+                    # Send header line
                     colored_header = _rainbow(f"━━━ {from_label} ━━━")
-                    sys.stderr.write(f"\n{colored_header}\n{m['content']}\n{colored_header}\n")
-                    sys.stderr.flush()
+                    send_mcp_notification("notifications/claude/channel", {
+                        "content": colored_header,
+                        "meta": {"from_id": "system", "from_summary": "", "sent_at": ""},
+                    })
+                    # Send each line of the message separately
+                    lines = m["content"].split("\n")
+                    for line in lines:
+                        send_mcp_notification("notifications/claude/channel", {
+                            "content": f"  {line}",
+                            "meta": {"from_id": "system", "from_summary": "", "sent_at": ""},
+                        })
+                    # Send footer
+                    send_mcp_notification("notifications/claude/channel", {
+                        "content": colored_header,
+                        "meta": {"from_id": "system", "from_summary": "", "sent_at": ""},
+                    })
+                    # Main notification for AI context (full message)
                     send_mcp_notification("notifications/claude/channel", {
                         "content": f"[{colored_name}] {m['content']}",
                         "meta": {
