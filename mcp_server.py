@@ -26,6 +26,39 @@ if hasattr(sys.stdin, "reconfigure"):
 from http.client import HTTPConnection
 from pathlib import Path
 
+# Nickname file: maps cwd -> nickname for statusline integration
+NICK_FILE = Path.home() / ".claude-mesh-nick"
+
+
+def _normalize_path(p: str) -> str:
+    """Normalize path for cross-format comparison (Git Bash vs Windows)."""
+    return p.replace("\\", "/").lower().rstrip("/")
+
+
+def _save_nickname(nickname: str):
+    """Save this session's nickname to the shared nick file, keyed by cwd."""
+    key = _normalize_path(SESSION_DIR)
+    try:
+        data = {}
+        if NICK_FILE.exists():
+            data = json.loads(NICK_FILE.read_text(encoding="utf-8"))
+        data[key] = nickname
+        NICK_FILE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _remove_nickname():
+    """Remove this session's entry from the nick file on exit."""
+    key = _normalize_path(SESSION_DIR)
+    try:
+        if NICK_FILE.exists():
+            data = json.loads(NICK_FILE.read_text(encoding="utf-8"))
+            data.pop(key, None)
+            NICK_FILE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
 
 # Broker API endpoint
 BROKER_HOST = "127.0.0.1"
@@ -115,16 +148,22 @@ def register():
     """Register this session with the broker. Auto-generates summary from machine + directory."""
     # Auto summary: last directory component
     dir_name = Path(SESSION_DIR).name or "home"
-    return broker_request("POST", "/register", {
+    result = broker_request("POST", "/register", {
         "peer_id": PEER_ID,
         "session_dir": SESSION_DIR,
         "summary": dir_name,
     })
+    # Save nickname for statusline
+    nickname = result.get("nickname")
+    if nickname:
+        _save_nickname(nickname)
+    return result
 
 
 def unregister():
     """Unregister this session."""
     broker_request("POST", "/unregister", {"peer_id": PEER_ID})
+    _remove_nickname()
 
 
 def send_mcp_notification(method: str, params: dict):
@@ -166,10 +205,13 @@ def message_poller():
                 msg_id = m.get("id")
                 if msg_id not in notified_ids:
                     notified_ids.add(msg_id)
+                    from_nick = m.get("from_nickname", "")
+                    from_label = from_nick or m["from_peer"][:8]
                     send_mcp_notification("notifications/claude/channel", {
-                        "content": m["content"],
+                        "content": f"[{from_label}] {m['content']}",
                         "meta": {
                             "from_id": m["from_peer"],
+                            "from_nickname": from_nick,
                             "from_summary": m.get("from_summary", ""),
                             "from_cwd": m.get("from_cwd", ""),
                             "sent_at": m.get("timestamp", ""),
@@ -199,6 +241,40 @@ def tool_list_peers(scope: str = "all") -> str:
 
 
 def tool_send_message(to: str, message: str) -> str:
+    # Phase 10: broadcast to all peers
+    if to.lower() == "all":
+        peers = broker_request("GET", "/peers?scope=all").get("peers", [])
+        targets = [p for p in peers if p["peer_id"] != PEER_ID and p.get("status") == "online"]
+        if not targets:
+            return "No online peers to send to."
+        results = []
+        for p in targets:
+            r = broker_request("POST", "/send", {
+                "from": PEER_ID,
+                "to": p["peer_id"],
+                "content": message,
+            })
+            label = p.get("nickname") or p["peer_id"][:8]
+            results.append(f"{label}: {'ok' if r.get('status') == 'ok' else 'failed'}")
+        return f"Broadcast to {len(targets)} peers: " + ", ".join(results)
+
+    # Phase 9: multicast to comma-separated targets
+    if "," in to:
+        targets = [t.strip() for t in to.split(",") if t.strip()]
+        results = []
+        for t in targets:
+            r = broker_request("POST", "/send", {
+                "from": PEER_ID,
+                "to": t,
+                "content": message,
+            })
+            if r.get("status") == "ok":
+                results.append(f"{r.get('delivered_to', t)}: ok")
+            else:
+                results.append(f"{t}: failed ({r.get('message', '?')})")
+        return f"Sent to {len(targets)} peers: " + ", ".join(results)
+
+    # Single target (existing behavior)
     result = broker_request("POST", "/send", {
         "from": PEER_ID,
         "to": to,
@@ -233,6 +309,7 @@ def tool_set_nickname(nickname: str) -> str:
         "peer_id": PEER_ID,
         "nickname": nickname,
     })
+    _save_nickname(nickname)
     return f"Nickname set to: {nickname}"
 
 
@@ -268,11 +345,11 @@ TOOLS = {
         "handler": lambda args: tool_list_peers(args.get("scope", "all")),
     },
     "send_message": {
-        "description": "Send a message to another Claude Code session. Use peer_id, summary text, or machine:summary pattern.",
+        "description": "Send a message to Claude Code sessions. Supports: single target (nickname/peer_id/summary), multiple targets (comma-separated, e.g. 'Cubby,Star'), or broadcast ('all').",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "to": {"type": "string", "description": "Target peer identifier"},
+                "to": {"type": "string", "description": "Target: nickname, peer_id, comma-separated list, or 'all'"},
                 "message": {"type": "string", "description": "Message content"},
             },
             "required": ["to", "message"],

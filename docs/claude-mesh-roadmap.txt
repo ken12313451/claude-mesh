@@ -1,0 +1,138 @@
+# claude-mesh ロードマップ
+# ==============================================
+# 最終更新: 2026-04-03
+
+## プロジェクトの進化
+
+usb-remote-daemon → claude-pty-bridge → claude-mesh
+
+### 1. usb-remote-daemon（廃止）
+- claude --print ワンショット方式
+- User:自問自答問題が発生、フラットテキスト履歴渡しの設計上の欠陥
+- PTY方式（claude-pty-bridge）で根本解決
+
+### 2. claude-pty-bridge（前身・稼働中）
+- PTY上でClaude Code常駐 + WebSocket経由リモートアクセス
+- リポジトリ: https://github.com/ken12313451/claude-pty-bridge
+- 1対1通信（LC ↔ RC）+ ファイルベースリレー
+
+### 3. claude-mesh（現行プロジェクト）
+- リモートマシン間N対N分散メッシュネットワーク
+- リポジトリ: https://github.com/ken12313451/claude-mesh
+- claude-pty-bridgeの1対1制約を解消し、任意のClaude Code同士が通信可能に
+
+
+## 開発フェーズ（全体ロードマップ）
+
+| Phase | 内容                         | 状態       | 完了日     | 備考                                    |
+|-------|------------------------------|------------|------------|-----------------------------------------|
+| 1     | リモートClaude基盤           | 完了       | 2026-03-30 | PTY常駐、WebSocket中継、認証            |
+| 2     | 3者通話                      | 完了       | 2026-03-30 | LC/RC同時管理、ファイルリレー           |
+| 3     | Tailscale経由アクセス        | 完了       | 2026-03-31 | LC→RC Tailscale経由で動作確認           |
+| 4     | Agent Teams統合              | PoC完了    | 2026-03-31 | RC=チームリード方式、全フロー動作確認   |
+| 5     | モバイルアクセス             | 実質完了   | 2026-03-31 | /remote-control MINI-PTYでスマホ操作可能 |
+| 6     | claude-mesh (N対N通信)       | 完了       | 2026-04-02 | broker+transport+MCP+channels+nickname  |
+
+※ Phase 1〜5 は claude-pty-bridge で実装。Phase 6 が claude-mesh リポジトリ。
+
+
+## claude-mesh 実装詳細
+
+### コンポーネント
+- registry.py — SQLiteでpeer/message管理
+- transport/base.py — Transport抽象インターフェース
+- transport/direct.py — WebSocket直接接続（自動再接続、hello/hello_ackハンドシェイク）
+- broker.py — Mesh Broker（ローカルHTTP API port 7901 + リモートpeer同期 port 7900）
+- mcp_server.py — MCP Server (stdio) 6ツール提供
+- config.py — ~/.claude-mesh.json設定管理
+- nicknames.py — 835個のニックネーム自動割り当て
+
+### MCP ツール一覧
+| ツール | 機能 |
+|--------|------|
+| list_peers | ローカル/リモートpeer一覧（← YOUマーク付き） |
+| send_message | peer指定メッセージ送信（nickname/peer_id/summary指定可） |
+| check_messages | 未読メッセージ確認 |
+| set_summary | 自セッションの説明を設定 |
+| set_nickname | ニックネーム変更 |
+| mesh_status | broker接続状態・自己情報表示 |
+
+### 主要機能
+- broker間WebSocket接続（Tailscale経由、双方向）
+- リモートpeer同期（30秒間隔broadcast）
+- broker自動起動（mcp_server.py initialize時）
+- リアルタイム通知（channels プロトコル、`← claude-mesh:` プレフィックス）
+- heartbeat + 自動クリーンアップ（5分offline、10分削除）
+- ニックネーム自動割り当て（835個プール）
+- MCP グローバル登録（`claude mcp add --scope user` で全プロジェクトから利用可能）
+
+### テスト結果（2026-04-02〜03）
+- broker間WebSocket接続（Tailscale経由、双方向） ✅
+- リモートpeer同期（30秒間隔broadcast） ✅
+- broker API (register/peers/send/messages/status) ✅
+- MCP stdio (initialize/tools-list/tools-call) ✅
+- MCP E2E: LC→RC send_message ✅
+- MCP E2E: RC→LC send_message ✅
+- 3者mesh通信（Mage↔Cubby↔Star、ローカル×2+リモート×1） ✅
+- 日本語メッセージ（Python経由） ✅
+- 日本語メッセージ（curl直接） ❌（cp932問題、MCP経由では問題なし）
+
+### デバッグで修正した問題
+- 二重接続問題: machine_id辞書順で接続方向を決定（a14=client, home-pc=server）
+- WebSocket切断: callback例外でWebSocket接続が落ちないよう例外保護追加
+- websockets v16互換: ws.closed → close_code に変更
+- 日本語文字化け: sys.stdout.reconfigure(encoding="utf-8") + ensure_ascii=False
+- サロゲート文字: store_messageでcontentをサニタイズ
+- find_peer短縮ID: peer_idの前方一致検索を追加
+- known_peers辞書形式: {"machine_id": "address"} に変更して接続前に方向判定
+- broker.py /set_summary エンドポイント追加（/summaryと両方受付）
+- pollerのmark_read問題修正（check_messagesが空になるバグ）
+
+### 設計合意事項
+- P2P: 中央サーバーなし、broker同士が対等に接続
+- Transport抽象化: DirectTransport（Tailscale）実装済み、RelayTransport（クラウド）は将来
+- MCP準拠: Claude Code標準MCP機構でシームレス統合
+
+
+## Phase 4: Agent Teams統合 詳細
+
+### 調査結果（2026-03-31）
+- 公式Agent Teams: ファイルベース通信（~/.claude/teams/{name}/inboxes/）、ポーリング方式
+- 公式Channels: MCP経由のTelegram/Discord連携（3/20リリース）
+- 独自の差別化: リモートマシン間の永続セッション協調（公式は同一マシン内限定）
+
+### 3層アーキテクチャ設計
+- Layer 1（計算層・自宅サーバー）: Agent Teams (RC + teammates) が並列処理
+- Layer 2（統合層・出先PC）: LC が結果統合・ローカル作業
+- Layer 3（モバイル層・スマホ）: Channels (Telegram) で承認・確認
+
+### PoC結果
+- RCがチームリードを兼ねる方式 → 採用確定
+- TeamCreate → TaskCreate → Agent(teammate) → SendMessage → TeamDelete 全フロー動作
+- LC→RC(リレー)→チームメイト→RC→LC(リレー)の完全フロー実証
+
+
+## 安定性実績（2026-04-03確認）
+
+- PTY永続稼働: 72時間以上セッション維持 ✅
+- WebSocket再接続: PCスリープ→復帰後も正常復帰 ✅
+- リレー通信: 翌日もファイルベースリレー正常動作 ✅
+- Tailscale経由: 安定稼働 ✅
+- /remote-control MINI-PTY: セッション永続中も有効状態を維持 ✅
+- claude-mesh broker: 24時間以上常駐稼働 ✅
+
+
+## 接続情報
+
+- claude-pty-bridge サーバー: port 8601
+- claude-mesh broker間通信: port 7900
+- claude-mesh ローカルAPI: port 7901
+- Tailscale: A14 Laptop(100.109.107.51) ↔ Home PC(100.83.52.116)
+- SSH: Home PC port 22 (OpenSSH Server, デフォルトシェル: Git Bash)
+
+
+## 次のアクション
+
+- RelayTransport実装（クラウドリレー、優先度低 — Tailscaleで十分）
+- マルチマシン検証（3台以上、優先度低 — 2台で実証済み）
+- ブロードキャスト送信機能（send_message to: "all"、3者通信で有用性確認）

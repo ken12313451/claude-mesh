@@ -1,0 +1,96 @@
+# claude-pty-bridge 開発履歴
+# ===========================
+# claude-meshの前身プロジェクト。技術詳細と経緯の参照記録。
+# 最終更新: 2026-04-03
+
+## 概要
+
+自宅PCでClaude CodeをPTY（疑似端末）上に常駐させ、出先PCからWebSocket経由で
+リモートアクセスするシステム。claude-meshの土台として現在も稼働中。
+リポジトリ: https://github.com/ken12313451/claude-pty-bridge
+
+## アーキテクチャ
+
+```
+自宅PC (サーバー・24時間稼働)
+└── server.py (WebSocket on port 8601)
+    └── PTY上のClaude Code（常駐・フルエージェント）
+
+出先PC / 別PC (クライアント)
+└── pane_local.py + pane_remote.py → ws://<サーバーIP>:8601 に接続
+```
+
+## 技術スタック
+
+- Python 3.13+
+- pywinpty (Windows PTY)
+- websockets 15.x (WebSocket通信)
+- Claude Code CLI (サブスク認証)
+- Windows Terminal (wt) — 分割表示
+
+
+## 開発フェーズ（pty-bridge側）
+
+| Phase | 内容 | 完了日 |
+|-------|------|--------|
+| 1 | リモートClaude基盤（PTY常駐、WebSocket中継、認証） | 2026-03-30 |
+| 2 | 3者通話（LC/RC同時管理、ファイルリレー） | 2026-03-30 |
+| 3 | Tailscale経由の外出先アクセス | 2026-03-31 |
+| 4 | Agent Teams統合 PoC（RC=チームリード） | 2026-03-31 |
+| 5 | モバイルアクセス（/remote-control MINI-PTY） | 2026-03-31 |
+
+
+## server.py の構成
+
+- PTY遅延起動: クライアント接続のSIZEメッセージでPTY開始
+- 再接続時: 出力抑制 → resize → 画面クリア → micro-resize（ConPTY diff問題回避）
+- リレー: relay_file_watcher(RC→LC) + relay_injector(LC→RC)
+- 自動注入: PTY起動時にservercontext.txt読み込み指示をキュー
+- MAX_CLIENTS: 2
+- DA応答フィルタ: ConPTY出力からターミナルクエリ応答を除去
+
+
+## リレー通信（ファイルベース）
+
+- RC→LC: `.relay/to_local.txt` にWriteツールで書き込み
+- LC→RC: `.relay/to_remote.txt` → relay_injectorがPTYに自動注入（プロンプト待ち後）
+- 表示形式: RC→LC=黄色セパレーター、LC→RC=シアンセパレーター
+- PIDファイル（`.relay/server_watcher.pid`）でrelay_file_watcherの排他制御
+- 0.5秒ポーリングで検知、送信後にファイル削除
+
+※ claude-meshの登場により、リレー通信は主にRC/LC間の専用チャネルとして使用。
+  N対Nの汎用通信はclaude-meshが担う。
+
+
+## 主な実装・修正履歴
+
+- `_pty_write_all()` ヘルパー: pywinptyの部分書き込み対策
+- ログ表示改善: 50→80文字 + メッセージ長(len)表示
+- 自動注入プロンプト: PTY起動直後にservercontext.txtを自動読み込み
+- pane_remote.py: 80文字切り詰め廃止→全文表示、カラーセパレーター追加
+- pane_remote.py: ping_interval=60, ping_timeout=30 でアイドル切断対策
+- セキュリティ: getpass + VTエスケープサニタイズ
+- ConPTY表示崩れ対策: PTY遅延起動 + 再接続時出力抑制 + micro-resize
+
+
+## 既知の注意点
+
+1. relay_injectorのprompt_ready問題: RCが作業中だとLC→RCメッセージがキューに滞留
+2. main_asyncのwhileループ: PTY死亡でサーバーごと終了（再起動機構なし）
+3. _suppress_outputの競合リスク: pty_readerスレッドとhandle_client間のレースコンディション可能性
+
+
+## ファイル担当ルール
+
+- server.py, servercontext.txt → RC側が主担当
+- pane_remote.py, clientcontext.txt → LC側が主担当
+- CLAUDE.md, CONTEXT.txt → 共同管理
+- claude-mesh/* → 共同開発
+
+
+## 安定性実績（2026-04-03確認）
+
+- PTY永続稼働: 72時間以上セッション維持 ✅
+- WebSocket再接続: PCスリープ→復帰後も正常復帰 ✅
+- リレー通信: 翌日もファイルベースリレー正常動作 ✅
+- Tailscale経由: 安定稼働 ✅
