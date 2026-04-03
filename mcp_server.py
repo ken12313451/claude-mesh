@@ -297,14 +297,8 @@ def _split_message(message: str, max_width: int = 40) -> list[str]:
 
 
 def tool_send_message(to: str, message: str) -> str:
-    # Auto-split long messages into single-line sends
-    msg_lines = _split_message(message)
-    if len(msg_lines) > 1:
-        all_results = []
-        for line in msg_lines:
-            result = tool_send_message(to, line)
-            all_results.append(result)
-        return all_results[-1]  # Return last result
+    # Auto-split long lines into multiple short lines (joined as one message)
+    message = "\n".join(_split_message(message))
 
     # Phase 10: broadcast to all peers
     if to.lower() == "all":
