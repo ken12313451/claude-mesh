@@ -219,9 +219,9 @@ def message_poller():
                     notified_ids.add(msg_id)
                     from_nick = m.get("from_nickname", "")
                     from_label = from_nick or m["from_peer"][:8]
-                    colored_label = _rainbow(from_label)
+                    colored_prefix = _rainbow(f"[{from_label}]")
                     send_mcp_notification("notifications/claude/channel", {
-                        "content": f"[{colored_label}] {m['content']}",
+                        "content": f"{colored_prefix} {m['content']}",
                         "meta": {
                             "from_id": m["from_peer"],
                             "from_nickname": from_nick,
