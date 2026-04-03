@@ -127,7 +127,7 @@ class MeshBroker:
             body = None
             if content_length > 0:
                 body = await reader.read(content_length)
-                body = json.loads(body.decode())
+                body = json.loads(body.decode("utf-8"))
 
             # Route
             method, path, *_ = request.split(" ")
