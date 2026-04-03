@@ -317,7 +317,11 @@ def tool_send_message(to: str, message: str) -> str:
         "content": message,
     })
     if result.get("status") == "ok":
-        return f"Message sent to {result.get('delivered_to', to)}"
+        delivered = result.get("delivered_to", to)
+        SEND_BG = "\x1b[41m\x1b[37m"  # red bg, white fg
+        RST = "\x1b[0m"
+        header = _rainbow(f"━━━ → {delivered} ━━━")
+        return f"{SEND_BG}{header}\n{message}\n{header}{RST}\nMessage sent to {delivered}"
     return f"Failed: {result.get('message', 'unknown error')}"
 
 
