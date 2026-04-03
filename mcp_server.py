@@ -223,21 +223,23 @@ def message_poller():
                     from_label = from_nick or m["from_peer"][:8]
                     colored_name = _rainbow(from_label)
                     # Send header line
+                    BG = "\x1b[40m\x1b[37m"  # black bg, white fg
+                    RST = "\x1b[0m"
                     colored_header = _rainbow(f"━━━ {from_label} ━━━")
                     send_mcp_notification("notifications/claude/channel", {
-                        "content": colored_header,
+                        "content": f"{BG}{colored_header}{RST}",
                         "meta": {"from_id": "system", "from_summary": "", "sent_at": ""},
                     })
                     # Send each line of the message separately
                     lines = m["content"].split("\n")
                     for line in lines:
                         send_mcp_notification("notifications/claude/channel", {
-                            "content": f"  {line}",
+                            "content": f"{BG}  {line}{RST}",
                             "meta": {"from_id": "system", "from_summary": "", "sent_at": ""},
                         })
                     # Send footer
                     send_mcp_notification("notifications/claude/channel", {
-                        "content": colored_header,
+                        "content": f"{BG}{colored_header}{RST}",
                         "meta": {"from_id": "system", "from_summary": "", "sent_at": ""},
                     })
                     # Main notification for AI context (full message)
@@ -443,7 +445,7 @@ def handle_jsonrpc(request: dict) -> dict:
                     "tools": {},
                     "experimental": {"claude/channel": {}},
                 },
-                "serverInfo": {"name": "mesh", "version": "0.5.0"},
+                "serverInfo": {"name": "m", "version": "0.6.0"},
                 "instructions": (
                     "You are connected to claude-mesh, a distributed mesh network for Claude Code sessions. "
                     "IMPORTANT: On your FIRST response to the user, call mesh_status and list_peers, then "
