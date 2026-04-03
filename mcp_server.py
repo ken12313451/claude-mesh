@@ -222,6 +222,10 @@ def message_poller():
                     from_nick = m.get("from_nickname", "")
                     from_label = from_nick or m["from_peer"][:8]
                     colored_name = _rainbow(from_label)
+                    # Full message to stderr (visible in terminal)
+                    colored_header = _rainbow(f"━━━ {from_label} ━━━")
+                    sys.stderr.write(f"\n{colored_header}\n{m['content']}\n{colored_header}\n")
+                    sys.stderr.flush()
                     send_mcp_notification("notifications/claude/channel", {
                         "content": f"[{colored_name}] {m['content']}",
                         "meta": {
