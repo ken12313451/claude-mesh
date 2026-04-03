@@ -48,13 +48,16 @@ def _normalize_path(p: str) -> str:
 
 
 def _save_nickname(nickname: str):
-    """Save this session's nickname to the shared nick file, keyed by cwd."""
-    key = _normalize_path(SESSION_DIR)
+    """Save this session's nickname to the shared nick file, keyed by peer_id."""
     try:
         data = {}
         if NICK_FILE.exists():
             data = json.loads(NICK_FILE.read_text(encoding="utf-8"))
-        data[key] = nickname
+        data[PEER_ID] = {
+            "nickname": nickname,
+            "project_dir": _normalize_path(SESSION_DIR),
+            "registered_at": time.time(),
+        }
         NICK_FILE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     except Exception:
         pass
@@ -62,11 +65,10 @@ def _save_nickname(nickname: str):
 
 def _remove_nickname():
     """Remove this session's entry from the nick file on exit."""
-    key = _normalize_path(SESSION_DIR)
     try:
         if NICK_FILE.exists():
             data = json.loads(NICK_FILE.read_text(encoding="utf-8"))
-            data.pop(key, None)
+            data.pop(PEER_ID, None)
             NICK_FILE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     except Exception:
         pass
