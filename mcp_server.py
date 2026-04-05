@@ -94,10 +94,12 @@ def _with_nick_file(fn):
 def _save_nickname(nickname: str):
     """Save this session's nickname to the shared nick file, keyed by peer_id."""
     def update(data):
+        existing = data.get(PEER_ID)
         data[PEER_ID] = {
             "nickname": nickname,
             "project_dir": _normalize_path(SESSION_DIR),
-            "registered_at": time.time(),
+            "registered_at": existing["registered_at"] if existing else time.time(),
+            "session_id": _guess_session_id(),
         }
         return data
     _with_nick_file(update)
@@ -121,6 +123,23 @@ BROKER_SCRIPT = Path(__file__).parent / "broker.py"
 # This session's identity
 PEER_ID = str(uuid.uuid4())
 SESSION_DIR = os.getcwd()
+
+
+def _guess_session_id():
+    """Guess the Claude Code session_id from the most recently modified transcript file."""
+    try:
+        # Claude Code stores transcripts at ~/.claude/projects/<encoded-dir>/<session_id>.jsonl
+        # Encoded dir replaces [:\\/] with '-'
+        encoded = SESSION_DIR.replace("\\", "-").replace("/", "-").replace(":", "-")
+        transcript_dir = Path.home() / ".claude" / "projects" / encoded
+        if not transcript_dir.is_dir():
+            return ""
+        jsonls = sorted(transcript_dir.glob("*.jsonl"), key=lambda f: f.stat().st_mtime, reverse=True)
+        if jsonls:
+            return jsonls[0].stem
+    except Exception:
+        pass
+    return ""
 
 # Message polling interval (seconds)
 POLL_INTERVAL = 3
