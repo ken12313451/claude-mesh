@@ -54,7 +54,7 @@ Claude → MCP Server → HTTP(localhost:7901) → Mesh Broker → Transport →
 - Step 4: MCP Server (stdio)
 - Step 5: 2台で動作テスト
 - Step 6: VPN不要のリモート通信（2つのアプローチ）
-  - **6a: SSHトンネル方式** — ローカルClaudeがSSH経由でリモートPCのbrokerに接続。Tailscale不要でもSSHアクセスがあれば成立。共用PCにbroker常駐不要（リモートからSSHでbroker起動→操作→終了が可能）。ポート開放またはリバースSSHトンネルが必要
+  - **6a: SSHトンネル方式** — claude.aiから共用PCのremote-controlセッションを起動し、そのClaudeがリバースSSHトンネルを自宅PCに向けて開通。自宅PCからトンネル経由で共用PCのbrokerにアクセス。セッション終了でトンネルも消えるため常駐プロセス不要。remote-controlの安定稼働が前提（watchdogで対策済み）。リバースSSHトンネル開通スクリプト（Python）の作成が必要
   - **6b: クラウドリレー方式** — クラウドリレーサーバー（Cloudflare Workers / Fly.io等）を中継点にし、VPN/SSH不要でリモート通信を実現。共用PCではbroker常駐が困難なため、MCP Serverが直接リレーに接続する軽量モードも検討
   - transport/relay.pyは未実装（base.pyのインターフェースに準拠して作成）
 - Step 7: 安定性改善
