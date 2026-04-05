@@ -129,14 +129,21 @@ def _guess_session_id():
     """Guess the Claude Code session_id from the most recently modified transcript file."""
     try:
         # Claude Code stores transcripts at ~/.claude/projects/<encoded-dir>/<session_id>.jsonl
-        # Encoded dir replaces [:\\/] with '-'
-        encoded = SESSION_DIR.replace("\\", "-").replace("/", "-").replace(":", "-")
-        transcript_dir = Path.home() / ".claude" / "projects" / encoded
-        if not transcript_dir.is_dir():
+        # The dir encoding is lossy, so scan all jsonl files and pick the most recent.
+        # This works because _save_nickname is called right after MCP registration,
+        # when the current session's transcript is actively being written to.
+        projects_root = Path.home() / ".claude" / "projects"
+        if not projects_root.is_dir():
             return ""
-        jsonls = sorted(transcript_dir.glob("*.jsonl"), key=lambda f: f.stat().st_mtime, reverse=True)
-        if jsonls:
-            return jsonls[0].stem
+        best_file = None
+        best_mtime = 0
+        for jsonl in projects_root.glob("*/*.jsonl"):
+            mtime = jsonl.stat().st_mtime
+            if mtime > best_mtime:
+                best_mtime = mtime
+                best_file = jsonl
+        if best_file:
+            return best_file.stem
     except Exception:
         pass
     return ""
