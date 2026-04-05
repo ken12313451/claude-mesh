@@ -53,9 +53,9 @@ Claude → MCP Server → HTTP(localhost:7901) → Mesh Broker → Transport →
 - Step 3: Mesh Broker (ローカルAPI + peer同期)
 - Step 4: MCP Server (stdio)
 - Step 5: 2台で動作テスト
-- Step 6: RelayTransport追加
-  - クラウドリレーサーバー（Cloudflare Workers / Fly.io等）を中継点にし、Tailscale/VPNなしでリモート通信を実現
-  - 共用PCではbroker常駐が困難なため、MCP Serverがbrokerを介さず直接リレーに接続する軽量モードも検討
+- Step 6: VPN不要のリモート通信（2つのアプローチ）
+  - **6a: SSHトンネル方式** — ローカルClaudeがSSH経由でリモートPCのbrokerに接続。Tailscale不要でもSSHアクセスがあれば成立。共用PCにbroker常駐不要（リモートからSSHでbroker起動→操作→終了が可能）。ポート開放またはリバースSSHトンネルが必要
+  - **6b: クラウドリレー方式** — クラウドリレーサーバー（Cloudflare Workers / Fly.io等）を中継点にし、VPN/SSH不要でリモート通信を実現。共用PCではbroker常駐が困難なため、MCP Serverが直接リレーに接続する軽量モードも検討
   - transport/relay.pyは未実装（base.pyのインターフェースに準拠して作成）
 - Step 7: 安定性改善
   - MCP Server切断問題: 長時間セッションでClaude Code側がstdioパイプを切断する（Claude Code側の仕様制限、対策困難）
