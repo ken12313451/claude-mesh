@@ -47,31 +47,68 @@ def _normalize_path(p: str) -> str:
     return p.replace("\\", "/").lower().rstrip("/")
 
 
-def _save_nickname(nickname: str):
-    """Save this session's nickname to the shared nick file, keyed by peer_id."""
+_NICK_LOCK = Path.home() / ".claude-mesh-nick.lock"
+
+
+def _with_nick_file(fn):
+    """Read-modify-write the nick file under a file lock to prevent corruption."""
+    lock_fd = None
     try:
+        lock_fd = open(_NICK_LOCK, "w")
+        if sys.platform == "win32":
+            import msvcrt
+            # LK_LOCK blocks until lock is acquired (up to 10s timeout)
+            msvcrt.locking(lock_fd.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+
         data = {}
         if NICK_FILE.exists():
-            data = json.loads(NICK_FILE.read_text(encoding="utf-8"))
+            raw = NICK_FILE.read_text(encoding="utf-8").strip()
+            if raw:
+                try:
+                    data = json.loads(raw)
+                except json.JSONDecodeError:
+                    decoder = json.JSONDecoder()
+                    data, _ = decoder.raw_decode(raw)
+
+        data = fn(data)
+        NICK_FILE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    except (OSError, json.JSONDecodeError):
+        pass
+    finally:
+        if lock_fd:
+            try:
+                if sys.platform == "win32":
+                    import msvcrt
+                    msvcrt.locking(lock_fd.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            except OSError:
+                pass
+            lock_fd.close()
+
+
+def _save_nickname(nickname: str):
+    """Save this session's nickname to the shared nick file, keyed by peer_id."""
+    def update(data):
         data[PEER_ID] = {
             "nickname": nickname,
             "project_dir": _normalize_path(SESSION_DIR),
             "registered_at": time.time(),
         }
-        NICK_FILE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-    except Exception:
-        pass
+        return data
+    _with_nick_file(update)
 
 
 def _remove_nickname():
     """Remove this session's entry from the nick file on exit."""
-    try:
-        if NICK_FILE.exists():
-            data = json.loads(NICK_FILE.read_text(encoding="utf-8"))
-            data.pop(PEER_ID, None)
-            NICK_FILE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-    except Exception:
-        pass
+    def update(data):
+        data.pop(PEER_ID, None)
+        return data
+    _with_nick_file(update)
 
 
 # Broker API endpoint
