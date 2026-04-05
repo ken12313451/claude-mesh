@@ -580,33 +580,58 @@ def handle_jsonrpc(request: dict) -> dict:
     }
 
 
+def _log_to_file(msg):
+    """Write a message to the MCP server log file for debugging."""
+    try:
+        log_path = Path.home() / ".claude-mesh-mcp.log"
+        with open(log_path, "a", encoding="utf-8") as f:
+            from datetime import datetime as _dt
+            f.write(f"[{_dt.now().strftime('%Y-%m-%d %H:%M:%S')}] [pid={os.getpid()}] {msg}\n")
+    except Exception:
+        pass
+
+
 def main():
     """Run MCP server on stdio."""
     atexit.register(unregister)
+    _log_to_file(f"MCP server started. session_dir={SESSION_DIR}")
 
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            request = json.loads(line)
-            response = handle_jsonrpc(request)
-            if response is not None:
-                with _stdout_lock:
-                    out = _sanitize_surrogates(json.dumps(response, ensure_ascii=False))
-                    sys.stdout.write(out + "\n")
-                    sys.stdout.flush()
-        except json.JSONDecodeError:
-            pass
-        except Exception as e:
-            error_resp = {
-                "jsonrpc": "2.0",
-                "id": None,
-                "error": {"code": -32603, "message": str(e)},
-            }
-            with _stdout_lock:
-                sys.stdout.write(json.dumps(error_resp, ensure_ascii=False) + "\n")
-                sys.stdout.flush()
+    try:
+        for line in sys.stdin:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                request = json.loads(line)
+                response = handle_jsonrpc(request)
+                if response is not None:
+                    with _stdout_lock:
+                        out = _sanitize_surrogates(json.dumps(response, ensure_ascii=False))
+                        sys.stdout.write(out + "\n")
+                        sys.stdout.flush()
+            except json.JSONDecodeError:
+                pass
+            except BrokenPipeError:
+                _log_to_file("BrokenPipeError on stdout — Claude Code disconnected")
+                break
+            except Exception as e:
+                _log_to_file(f"Error handling request: {e}")
+                error_resp = {
+                    "jsonrpc": "2.0",
+                    "id": None,
+                    "error": {"code": -32603, "message": str(e)},
+                }
+                try:
+                    with _stdout_lock:
+                        sys.stdout.write(json.dumps(error_resp, ensure_ascii=False) + "\n")
+                        sys.stdout.flush()
+                except BrokenPipeError:
+                    _log_to_file("BrokenPipeError sending error response")
+                    break
+    except Exception as e:
+        _log_to_file(f"Fatal error in main loop: {e}")
+
+    _log_to_file("MCP server exiting")
 
 
 if __name__ == "__main__":
