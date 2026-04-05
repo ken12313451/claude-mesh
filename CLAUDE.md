@@ -55,7 +55,7 @@ Claude → MCP Server → HTTP(localhost:7901) → Mesh Broker → Transport →
 - Step 5: 2台で動作テスト
 - Step 6: VPN不要のリモート通信（2つのアプローチ）
   - **6a: SSHトンネル方式** — claude.aiから共用PCのremote-controlセッションを起動し、そのClaudeがリバースSSHトンネルを自宅PCに向けて開通。自宅PCからトンネル経由で共用PCのbrokerにアクセス。セッション終了でトンネルも消えるため常駐プロセス不要。remote-controlの安定稼働が前提（watchdogで対策済み）。リバースSSHトンネル開通スクリプト（Python）の作成が必要
-  - **6b: クラウドリレー方式** — クラウドリレーサーバー（Cloudflare Workers / Fly.io等）を中継点にし、VPN/SSH不要でリモート通信を実現。共用PCではbroker常駐が困難なため、MCP Serverが直接リレーに接続する軽量モードも検討
+  - **6b: Cloudflare Tunnel方式** — cloudflaredを自宅PCで起動し、SSHをCloudflare経由で公開。共用PCからはSSHクライアント（Windows標準搭載）だけでアクセス可能。ポート開放・VPN・DDNS全て不要。共用PCにソフトインストール不要。オンデマンド起動（使う時だけトンネル開通）でセキュリティも確保。wingetでインストール可（`winget install Cloudflare.cloudflared`）。Cloudflareアカウント要
   - transport/relay.pyは未実装（base.pyのインターフェースに準拠して作成）
 - Step 7: 安定性改善
   - MCP Server切断問題: 長時間セッションでClaude Code側がstdioパイプを切断する（Claude Code側の仕様制限、対策困難）
