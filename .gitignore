@@ -4,3 +4,4 @@ __pycache__/
 .claude-mesh.json
 .claude/
 *.local.json
+test_claude/
