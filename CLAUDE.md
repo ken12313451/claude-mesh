@@ -16,18 +16,26 @@
 3. **MCP準拠**: Claude Codeの標準MCP機構で統合
 4. **最小依存**: Python標準ライブラリ + websockets + SQLite
 
+## ロードマップ
+
+中長期的な開発計画(フェーズ A / B / C — クローン即動作 → pipx 化 → PyPI 公開)は
+[PROJECT_ROADMAP.md](./PROJECT_ROADMAP.md) に集約してある。新しいタスクや優先度を
+判断する際はまずそちらを参照すること。
+
 ## コンポーネント
 
 | ファイル | 役割 |
 |---------|------|
-| `broker.py` | Mesh Broker — 各マシンで1つ常駐。peer管理 + リモート同期 + メッセージルーティング |
-| `transport/base.py` | Transport抽象インターフェース |
-| `transport/direct.py` | Tailscale/LAN直接WebSocket接続 |
-| `transport/relay.py` | クラウドリレー経由接続（未実装） |
-| `mcp_server.py` | MCP Server — Claude Codeセッションごとに起動 |
-| `registry.py` | Peer Registry — SQLiteでpeer/message管理 |
-| `config.py` | 設定管理 |
-| `mesh.json` | マシン固有の設定ファイル |
+| `cli.py` | セットアップ CLI — `init` / `install` / `status`。リポジトリルートに置く |
+| `src/broker.py` | Mesh Broker — 各マシンで1つ常駐。peer管理 + リモート同期 + メッセージルーティング |
+| `src/transport/base.py` | Transport抽象インターフェース |
+| `src/transport/direct.py` | Tailscale/LAN直接WebSocket接続 |
+| `src/transport/relay.py` | クラウドリレー経由接続(未実装) |
+| `src/mcp_server.py` | MCP Server — Claude Codeセッションごとに起動 |
+| `src/registry.py` | Peer Registry — SQLiteでpeer/message管理 |
+| `src/config.py` | 設定管理 |
+| `src/nicknames.py` | 835種類のニックネームプール |
+| `~/.claude-mesh.json` | マシン固有の設定ファイル(ホームディレクトリ側) |
 
 ## 通信フロー
 

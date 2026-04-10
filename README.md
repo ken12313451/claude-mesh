@@ -64,15 +64,21 @@ Machine A                              Machine B
 
 ```
 claude-mesh/
-├── broker.py          # Mesh Broker本体（各マシンで1つ常駐）
-├── transport/
-│   ├── base.py        # Transport抽象インターフェース
-│   ├── direct.py      # Tailscale/LAN直接接続
-│   └── relay.py       # クラウドリレー経由
-├── mcp_server.py      # MCP Server（Claude Codeとの接続点）
-├── registry.py        # Peer Registry（SQLite）
-├── config.py          # 設定管理
-└── mesh.json          # 設定ファイル
+├── cli.py                # セットアップ CLI(init / install / status)— ユーザー入口
+├── src/
+│   ├── broker.py         # Mesh Broker 本体(各マシンで1つ常駐)
+│   ├── mcp_server.py     # MCP Server(Claude Code との接続点)
+│   ├── registry.py       # Peer Registry(SQLite)
+│   ├── config.py         # 設定管理
+│   ├── nicknames.py      # 835 種類のニックネームプール
+│   └── transport/
+│       ├── base.py       # Transport 抽象インターフェース
+│       ├── direct.py     # Tailscale/LAN 直接接続
+│       └── relay.py      # クラウドリレー経由(未実装)
+├── docs/                 # 設計ドキュメント
+├── README.md
+├── PROJECT_ROADMAP.md    # フェーズ A/B/C のロードマップ
+└── CLAUDE.md             # プロジェクト用 Claude Code 指示
 ```
 
 ### 各コンポーネントの役割
@@ -214,7 +220,7 @@ git clone https://github.com/ken12313451/claude-mesh.git
 
 ### Step 3: MCP グローバル登録
 ```bash
-claude mcp add --scope user claude-mesh -- python "/path/to/claude-mesh/mcp_server.py"
+claude mcp add --scope user claude-mesh -- python "/path/to/claude-mesh/src/mcp_server.py"
 ```
 これで全プロジェクトからclaude-meshツールが使えるようになる。
 

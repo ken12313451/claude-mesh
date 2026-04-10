@@ -24,7 +24,7 @@ from pathlib import Path
 # --- Paths -------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parent.resolve()
-MCP_SERVER = REPO_ROOT / "mcp_server.py"
+MCP_SERVER = REPO_ROOT / "src" / "mcp_server.py"
 CONFIG_PATH = Path.home() / ".claude-mesh.json"
 STATUSLINE_PATH = Path.home() / ".claude" / "statusline.js"
 SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
