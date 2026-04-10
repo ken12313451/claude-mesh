@@ -126,18 +126,23 @@ SESSION_DIR = os.getcwd()
 
 
 def _guess_session_id():
-    """Guess the Claude Code session_id from the most recently modified transcript file."""
+    """Find this session's Claude Code session_id from transcripts in our project dir.
+
+    Claude Code stores transcripts at ~/.claude/projects/<encoded-cwd>/<session_id>.jsonl
+    where <encoded-cwd> is cwd with [\\\\/:_] replaced by '-' (case preserved).
+    By scoping the scan to our own project dir we eliminate cross-project pollution;
+    the most recently modified jsonl is then this session's transcript with high
+    confidence (the MCP server registers immediately as Claude Code starts writing).
+    """
     try:
-        # Claude Code stores transcripts at ~/.claude/projects/<encoded-dir>/<session_id>.jsonl
-        # The dir encoding is lossy, so scan all jsonl files and pick the most recent.
-        # This works because _save_nickname is called right after MCP registration,
-        # when the current session's transcript is actively being written to.
-        projects_root = Path.home() / ".claude" / "projects"
-        if not projects_root.is_dir():
+        import re
+        encoded = re.sub(r"[\\/:_]", "-", os.getcwd())
+        project_dir = Path.home() / ".claude" / "projects" / encoded
+        if not project_dir.is_dir():
             return ""
         best_file = None
         best_mtime = 0
-        for jsonl in projects_root.glob("*/*.jsonl"):
+        for jsonl in project_dir.glob("*.jsonl"):
             mtime = jsonl.stat().st_mtime
             if mtime > best_mtime:
                 best_mtime = mtime
@@ -275,6 +280,18 @@ def message_poller():
                     "session_dir": SESSION_DIR,
                 })
                 heartbeat_counter = 0
+                # Sync nickname from broker → nick file. Handles the case where
+                # the broker re-registers this peer with a new auto-generated
+                # nickname (e.g. after broker DB cleanup) — without this, the
+                # nick file keeps the original name forever and the statusline
+                # displays a stale label.
+                peers = broker_request("GET", "/peers?scope=local").get("peers", [])
+                for peer in peers:
+                    if peer.get("peer_id") == PEER_ID:
+                        current_nick = peer.get("nickname", "")
+                        if current_nick:
+                            _save_nickname(current_nick)
+                        break
 
             # Poll for messages
             result = broker_request("GET", f"/messages?peer_id={PEER_ID}&mark_read=false")
