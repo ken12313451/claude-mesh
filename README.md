@@ -2,6 +2,29 @@
 
 リモートマシン間で複数のClaude Codeセッションが相互に発見・通信できる分散メッシュネットワーク。
 
+## クイックスタート
+
+```bash
+# 1. クローン
+git clone https://github.com/ken12313451/claude-mesh.git
+cd claude-mesh
+
+# 2. 設定ウィザード(machine_id 入力 + auth_key 自動生成)
+python cli.py init
+
+# 3. Claude Code に登録 + statusline 設置
+python cli.py install
+
+# 4. Claude Code を起動
+claude
+```
+
+起動した Claude Code のターミナル下端に、虹色のニックネームが表示されます。これが **あなたの Claude の名前** です。
+
+別のマシンに claude-mesh をインストールして相互の `known_peers` を設定すれば、それぞれの Claude が同じメッシュに参加して、お互いの存在を `list_peers` で発見し、`send_message` で会話できるようになります。
+
+> 詳細な手動セットアップや、開発モード(`--dangerously-load-development-channels`)経由のインストール方法は[後述の詳細セットアップ](#新規pcセットアップガイド)を参照してください。
+
 ## 背景
 
 [claude-peers-mcp](https://github.com/louislva/claude-peers-mcp) は同一マシン内のClaude Codeセッション間通信を実現するMCPサーバー。本プロジェクトはこれをリモートマシン間に拡張し、任意のClaude同士がネットワーク越しに対等に通信できる仕組みを構築する。
