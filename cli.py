@@ -61,15 +61,32 @@ process.stdin.on('end', () => {
     const data = JSON.parse(input);
     const pct = Math.floor(data.context_window?.used_percentage || 0);
 
-    // Try to read claude-mesh nickname
+    // Try to read claude-mesh nickname.
+    // Matching strategy (most reliable first):
+    //   1. WT_SESSION (Windows Terminal tab UUID) - each tab has a unique
+    //      GUID inherited by all descendants, not affected by jsonl mtime
+    //      races when multiple Claudes start in the same directory.
+    //   2. session_id - Claude Code's own session UUID, used as a fallback
+    //      for non-Windows-Terminal environments or legacy nick entries.
     let nick = '';
     try {
         const nickFile = path.join(process.env.HOME || process.env.USERPROFILE, '.claude-mesh-nick');
         const nicks = JSON.parse(fs.readFileSync(nickFile, 'utf-8'));
         const sessionId = data.session_id || '';
+        const wtSession = process.env.WT_SESSION || '';
 
-        // Match by session_id (set after first MCP tool call)
-        if (sessionId) {
+        // Pass 1: WT_SESSION exact match
+        if (wtSession) {
+            for (const [pid, entry] of Object.entries(nicks)) {
+                if (typeof entry === 'object' && entry.wt_session && entry.wt_session === wtSession) {
+                    nick = entry.nickname || '';
+                    break;
+                }
+            }
+        }
+
+        // Pass 2: session_id match (fallback)
+        if (!nick && sessionId) {
             for (const [pid, entry] of Object.entries(nicks)) {
                 if (typeof entry === 'object' && entry.session_id === sessionId) {
                     nick = entry.nickname || '';

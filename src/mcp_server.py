@@ -92,7 +92,19 @@ def _with_nick_file(fn):
 
 
 def _save_nickname(nickname: str):
-    """Save this session's nickname to the shared nick file, keyed by peer_id."""
+    """Save this session's nickname to the shared nick file, keyed by peer_id.
+
+    We store three identifiers, in order of matching reliability:
+      - wt_session: Windows Terminal tab UUID (set by WT for each tab and
+        inherited by all child processes). 100% unique per tab, not affected
+        by jsonl mtime races. Preferred when available.
+      - session_id: Claude Code's session UUID, guessed from the most recent
+        jsonl in our project dir. Racy when multiple sessions start in the
+        same cwd simultaneously, but works as a fallback outside Windows
+        Terminal.
+      - project_dir: the cwd of this mcp_server process, used by the
+        statusline script for sanity-checking.
+    """
     def update(data):
         existing = data.get(PEER_ID)
         data[PEER_ID] = {
@@ -100,6 +112,7 @@ def _save_nickname(nickname: str):
             "project_dir": _normalize_path(SESSION_DIR),
             "registered_at": existing["registered_at"] if existing else time.time(),
             "session_id": _guess_session_id(),
+            "wt_session": os.environ.get("WT_SESSION", ""),
         }
         return data
     _with_nick_file(update)
